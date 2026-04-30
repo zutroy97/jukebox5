@@ -22,7 +22,7 @@ class AbstractSingleLineDisplay(ABC):
         '''Get the width of the display.'''
         pass
 
-    async def write_at_position(self, text: str, position: int):
+    async def write_at_position(self, position: int, text: str ):
         '''Write text to the display at a specific position.'''
         await self.set_position(position)
         await self.write(text)

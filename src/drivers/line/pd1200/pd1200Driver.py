@@ -1,11 +1,12 @@
 import logging
 import serial
 import asyncio
+from fair_async_rlock import FairAsyncRLock
 
 from .. import abstract_line_display
 
 class pd1200Driver():
-    Lock = asyncio.Lock()
+    Lock = FairAsyncRLock()
     
     def __init__(
             self, 

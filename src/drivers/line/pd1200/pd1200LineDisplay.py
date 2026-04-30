@@ -35,8 +35,9 @@ class pd1200LineDisplay(abstract_line_display.AbstractSingleLineDisplay):
         self._position = position
         await asyncio.sleep(0)
 
-    async def write_at_position(self, text: str, position: int):
+    async def write_at_position(self, position: int, text: str):
         '''Write text to the display at a specific position.'''
         async with self._driver.Lock:
-            await self._driver.set_position(position, self._line)
+            #await self._driver.set_position(position, self._line)
+            await self.set_position(position)
             await self.write(text=text)

@@ -3,6 +3,8 @@ from drivers.line.led_16seg import led16_display
 import asyncio
 import logging
 from animations.text.random_typewriter import RandomTypeWriter
+from animations.text import TextDiff
+from drivers.line import AbstractSingleLineDisplay
 
 async def main():
     driver = pd1200Driver(port='/dev/serial0', baud=9600, width=20)
@@ -41,30 +43,40 @@ async def main():
     # await display0.set_position(5)
     # await display0.write('X Zooch')
 
+async def vfdAnimation1(ld : AbstractSingleLineDisplay, text: str):
+    anim = RandomTypeWriter(text=text, max_text_width=20)
+    diff = TextDiff()
+    await anim.Start()
+    await ld.clear()
+    while await anim.Next():
+        text = await anim.GetText()
+        chars = diff.getDiff(text)
+        #print(chars)
+        for pos, c in chars:
+            print(f'pos={pos} c={c}')
+            await ld.write_at_position(pos, c)
+        #await ld.write(text)
+        print(f'\r{text}', end='')
+        
+        await asyncio.sleep(0.1)
+
+
+
 async def main2():
     driver = pd1200Driver(port='/dev/serial0', baud=9600, width=20)
     await driver.clear_screen()
     await driver.normal_display_mode()
     await driver.set_brightness(5)
+    
     display0 = pd1200LineDisplay(driver, line=0)
     display1 = pd1200LineDisplay(driver, line=1)
 
+    await vfdAnimation1(ld = display0, text="Jurassic Park Theme")
+    await vfdAnimation1(ld = display1, text="John Williams")
+    
+
     led0 = led16_display(addr=(0x70, 0x71))
     led1 = led16_display(addr=(0x72, 0x73, 0x74))
-
-    anim = RandomTypeWriter(text="Should display the text one character at a time, in a random order."
-        , max_text_width=20)
-   
-    await anim.Start()
-    while await anim.Next():
-        text = await anim.GetText()
-
-        await display0.write(text)
-        print(f'\r{text}', end='')
-        #print(f"Frame {cnt:>3}: {await anim.GetText()}")
-        await asyncio.sleep(0.1)
-        #print(f"Text Length: {len(anim.text)} Frames: {cnt}")
-    print()
 
 if __name__ == '__main__':
     formatter = logging.Formatter(
