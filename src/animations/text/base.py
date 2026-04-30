@@ -33,3 +33,6 @@ class TextAnimatorBase(ABC):
         '''Start/Restarts the animation'''
         pass
     
+
+
+        

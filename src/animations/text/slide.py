@@ -1,4 +1,4 @@
-from base import TextAnimatorBase
+from .base import TextAnimatorBase
 import asyncio
 
 class Slide(TextAnimatorBase):

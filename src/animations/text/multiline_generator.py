@@ -1,5 +1,5 @@
 import textwrap
-from base import TextAnimatorBase
+from .base import TextAnimatorBase
 import asyncio
 
 class MultiLineGenerator(TextAnimatorBase):

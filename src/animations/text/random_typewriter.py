@@ -1,6 +1,6 @@
 import random
 import asyncio
-from base import TextAnimatorBase
+from .base import TextAnimatorBase
 
 class RandomTypeWriter(TextAnimatorBase):
     def __init__(self,  **kwargs) -> None:

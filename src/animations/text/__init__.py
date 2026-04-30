@@ -1,6 +1,7 @@
 from .base import TextAnimatorBase
-from .multiline_generator import multiline_generator
-from .random_typewriter import random_typewriter
-from .slide import slide
+from .multiline_generator import MultiLineGenerator
+from .random_typewriter import RandomTypeWriter
+from .slide import Slide
+from .text_diff import TextDiff
 
-__all__ = ['TextAnimatorBase', 'multiline_generator', 'random_typewriter']
+__all__ = ['TextAnimatorBase', 'MultiLineGenerator', 'RandomTypeWriter', 'Slide', 'TextDiff']
