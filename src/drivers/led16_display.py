@@ -1,6 +1,6 @@
 import logging
 import asyncio
-from .. import abstract_line_display
+from . import abstract_line_display
 
 from busio import I2C
 import board

@@ -3,7 +3,7 @@ import serial
 import asyncio
 from fair_async_rlock import FairAsyncRLock
 
-from .. import abstract_line_display
+from . import abstract_line_display
 
 class pd1200Driver():
     Lock = FairAsyncRLock()

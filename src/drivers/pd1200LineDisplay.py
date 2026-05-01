@@ -1,7 +1,7 @@
 import logging
 from .pd1200Driver import pd1200Driver
 import asyncio
-from .. import abstract_line_display
+from . import abstract_line_display
 
 class pd1200LineDisplay(abstract_line_display.AbstractSingleLineDisplay):
     def __init__(self, driver: pd1200Driver, **kwargs) -> None:
