@@ -84,6 +84,33 @@ async def main2():
     await vfdAnimation2(ld = display0, text="Smells Like Teen Spirit")
     await vfdAnimation2(ld = display1, text="Nirvana")   
 
+async def main3():
+    driver = ldisp.pd1200Driver (port='/dev/serial0', baud=9600, width=20)
+    await driver.clear_screen()
+    await driver.normal_display_mode()
+    await driver.set_brightness(5)
+    
+    display0 = ldisp.pd1200LineDisplay(driver, line=0)
+    display1 = ldisp.pd1200LineDisplay(driver, line=1)
+
+    led0 = ldisp.led16_display(addr=(0x70, 0x71))
+    led1 = ldisp.led16_display(addr=(0x72, 0x73, 0x74))
+
+    async with asyncio.TaskGroup() as tg:
+        tg.create_task(
+            vfdAnimation2(ld = led0, text="Jurassic Park Theme")
+        )
+        tg.create_task(
+            vfdAnimation2(ld = led1, text="John Williams")
+        )
+        tg.create_task(
+            vfdAnimation2(ld = display0, text="Jurassic Park Theme")
+        )
+        tg.create_task(
+            vfdAnimation2(ld = display1, text="John Williams")
+        )        
+                    
+
 
 
 if __name__ == '__main__':
@@ -97,4 +124,4 @@ if __name__ == '__main__':
     logger.addHandler(handler)
     logger.setLevel(logging.DEBUG)
 
-    asyncio.run(main2())
+    asyncio.run(main3())
