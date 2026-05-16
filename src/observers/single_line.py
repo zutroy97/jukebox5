@@ -4,7 +4,6 @@ import asyncio
 from .observer_base import UpdateEventType, ObserverBase
 from drivers import abstract_line_display
 
-
 class SingleLineObserver(ObserverBase):
 
     def __init__(self, **kwargs) -> None:
@@ -27,7 +26,6 @@ class SingleLineObserver(ObserverBase):
 
     async def loop(self) -> None:
         '''Called to start the observer's main loop'''
-        self._is_running = True
         while self._is_running:
             if self._textUpdateNeeded and self._driver is not None:
                 await self._driver.clear()

@@ -13,7 +13,7 @@ class ObserverBase(ABC):
     def __init__(self, **kwargs) -> None:
         super().__init__()
         self._logger = logging.getLogger(self.__class__.__name__)
-        self._is_running : bool = False
+        self._is_running : bool = True
 
     def UpdateReceived(self, update_type: UpdateEventType, **kwargs) -> None:
         '''Called when an update is received'''
@@ -41,7 +41,6 @@ class ObserverBase(ABC):
 
     async def loop(self) -> None:
         '''Called to start the observer's main loop'''
-        self._is_running = True
         while self._is_running:
             await asyncio.sleep(0.1)  # Simulate some work
 

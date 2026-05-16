@@ -6,6 +6,7 @@ class MultiLineGenerator(TextAnimatorBase):
     '''Animates text by splitting it into multiple lines and displaying each line one at a time.'''
     def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
+        self._lines : list[str] = []
 
     async def Start(self) -> None:
         self._lines = textwrap.wrap(self.text, width=self.max_text_width, expand_tabs=False, drop_whitespace=True)
