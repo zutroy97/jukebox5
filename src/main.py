@@ -108,7 +108,7 @@ async def main():
     asyncio.create_task(coorinator.loop())
     coorinator.update_song_info(artist="John Williams", song_title="Jurassic Park Theme")
     await asyncio.sleep(2)
-    single_line_observer3.changeAnimation(Slide)
+    single_line_observer3.changeAnimation(RandomTypeWriter)
     await asyncio.sleep(5)
     coorinator.update_song_info(artist="Nirvana", song_title="Smells Like Teen Spirit")
     await asyncio.sleep(5)

@@ -41,7 +41,7 @@ class SingleLineAnimatedObserver(ObserverBase):
         self._state : SingleLineAnimatedObserver.State = self.State.IDLE
         self._prevState : SingleLineAnimatedObserver.State = self.State.IDLE
         self._timer : datetime = datetime.now()
-        self._line_animation : Type[TextAnimatorBase] = RandomTypeWriter
+        self._line_animation : Type[TextAnimatorBase] = Slide
 
     def UpdateReceived(self, update_type: UpdateEventType, **kwargs) -> None:
         '''Called when an update is received'''
