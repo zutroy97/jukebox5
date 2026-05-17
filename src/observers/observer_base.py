@@ -17,6 +17,7 @@ class ObserverBase(ABC):
 
     def UpdateReceived(self, update_type: UpdateEventType, **kwargs) -> None:
         '''Called when an update is received'''
+        #print(f"Observer {self.__class__.__name__} received update of type {update_type}")
         if update_type == UpdateEventType.ARTIST:
             artist = kwargs.get('value', 'Unknown Artist')
             self.updated_artist(artist=artist, **kwargs)

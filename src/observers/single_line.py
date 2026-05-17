@@ -13,7 +13,6 @@ class SingleLineObserver(ObserverBase):
         self._text : str = ""
         self._textUpdateNeeded : bool = False
 
-
     def UpdateReceived(self, update_type: UpdateEventType, **kwargs) -> None:
         '''Called when an update is received'''
         if self._event_type is None or update_type != self._event_type:

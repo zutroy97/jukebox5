@@ -21,6 +21,7 @@ class Coordinator:
 
     def notify_observers(self, update_type: UpdateEventType, value: str, **kwargs):
         for observer in self.observers:
+            #print(f"Notifying observer {observer.__class__.__name__} of update type {update_type} with value: {value}")
             observer.UpdateReceived(update_type=update_type, value=value, **kwargs)
     
     async def loop(self) -> None:
