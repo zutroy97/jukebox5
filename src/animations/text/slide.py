@@ -1,7 +1,7 @@
-from .base import TextAnimatorBase
+from .abstract_text_animator import AbstractTextAnimator
 import asyncio
 
-class Slide(TextAnimatorBase):
+class Slide(AbstractTextAnimator):
     def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
         self._position : int = 0

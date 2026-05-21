@@ -1,8 +1,8 @@
 
 import asyncio
-from typing import Type
+from typing import Awaitable, Callable, Type
 
-from animations.text import AnimationChain, AnimationChainLink, MultiLineGenerator, Slide, TextDiff, TextAnimatorBase, RandomTypeWriter
+from animations import AbstractTextAnimator, AnimationChain, AnimationChainLink, MultiLineGenerator, Slide, TextDiff, RandomTypeWriter
 
 from .observer_base import UpdateEventType, ObserverBase
 from drivers import abstract_line_display
@@ -19,7 +19,15 @@ class SingleLineAnimatedObserver(ObserverBase):
         ANIMATION_LINE_FINISHED = 4
         START_ANIMATION = 5
         ANIMATION_DELAY = 6
+        # CHARACTER_ANIMATION_BEGIN = 7
+        # CHARACTER_ANIMATING = 8
+        # CHARACTER_ANIMATION_FINISHED = 9
 
+    @staticmethod
+    async def _default_on_character_write_callback(observer: "SingleLineAnimatedObserver", pos: int, c: str) -> bool:
+        await observer._driver.write_at_position(pos, c)
+        return True
+    
     async def on_animation_finished(self, anim: abstract_line_display) -> bool:
         self._state = self.State.ANIMATION_FINISHED
         self._timer = datetime.now() + timedelta(seconds=2)
@@ -41,7 +49,9 @@ class SingleLineAnimatedObserver(ObserverBase):
         self._state : SingleLineAnimatedObserver.State = self.State.IDLE
         self._prevState : SingleLineAnimatedObserver.State = self.State.IDLE
         self._timer : datetime = datetime.now()
-        self._line_animation : Type[TextAnimatorBase] = Slide
+        self._line_animation : Type[AbstractTextAnimator] = Slide
+        self._on_character_write_callback : Callable[[SingleLineAnimatedObserver, int, str], Awaitable[bool]] = self._default_on_character_write_callback
+
 
     def UpdateReceived(self, update_type: UpdateEventType, **kwargs) -> None:
         '''Called when an update is received'''
@@ -57,21 +67,22 @@ class SingleLineAnimatedObserver(ObserverBase):
         value = kwargs.get('value', self._text)
         if value != self._text:
             self._text = value
+            print(f"Received update for event type {update_type} with value: {value}")
             self._state = self.State.TEXT_UPDATED
 
-    def changeAnimation(self, anim_type: Type[TextAnimatorBase]):
+    def changeAnimation(self, anim_type: Type[AbstractTextAnimator]):
         self._line_animation = anim_type
         self._state = self.State.TEXT_UPDATED
 
     async def loop(self) -> None:
         while self._is_running:
             now = datetime.now()
-            # if self._state not in [self.State.IDLE, self.State.ANIMATION_DELAY] and self._state != self._prevState:
-            #     print(f"State changed from {self._prevState} to {self._state}")
-            #     self._prevState = self._state
+            if self._state not in [self.State.IDLE, self.State.ANIMATION_DELAY] and self._state != self._prevState:
+                print(f"State changed from {self._prevState} to {self._state}")
+                self._prevState = self._state
 
             if self._state is self.State.TEXT_UPDATED:
-                #print(f"Creating animation for text: {self._text}")
+                print(f"Creating animation for text: {self._text}")
                 await self._createAnimation()
                 self._state = self.State.START_ANIMATION
 
@@ -86,7 +97,8 @@ class SingleLineAnimatedObserver(ObserverBase):
                     text = await self._anim.GetText()
                     chars = self._diff.getDiff(text)
                     for pos, c in chars:
-                        await self._driver.write_at_position(pos, c)
+                        await self._on_character_write_callback(self, pos, c)
+                        #await self._driver.write_at_position(pos, c)
                     self._timer = datetime.now() + timedelta(seconds=0.1)
                     self._state = self.State.ANIMATION_DELAY
 
@@ -115,6 +127,7 @@ class SingleLineAnimatedObserver(ObserverBase):
         return True
     
     async def _createAnimation(self) -> AnimationChain:
+        print(f"Creating animation chain for text: {self._text}")
         self._anim = AnimationChain(
             max_text_width=self._driver.Width,
             links=[

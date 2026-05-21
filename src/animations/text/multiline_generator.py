@@ -1,8 +1,9 @@
 import textwrap
-from .base import TextAnimatorBase
 import asyncio
 
-class MultiLineGenerator(TextAnimatorBase):
+from .abstract_text_animator import AbstractTextAnimator
+
+class MultiLineGenerator(AbstractTextAnimator):
     '''Animates text by splitting it into multiple lines and displaying each line one at a time.'''
     def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
