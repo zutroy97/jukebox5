@@ -32,16 +32,15 @@ async def main():
     coorinator.add_observer(single_line_observer2)
     single_line_observer3 = SingleLineAnimatedObserver(driver=led1, event_type=UpdateEventType.SONG_TITLE)
     coorinator.add_observer(single_line_observer3)
+    single_line_observer3.changeAnimation(RandomTypeWriter)
 
     asyncio.create_task(coorinator.loop())
     coorinator.update_song_info(artist="John Williams", song_title="Jurassic Park Theme")
-    # await asyncio.sleep(2)
-    # single_line_observer3.changeAnimation(RandomTypeWriter)
-    await asyncio.sleep(5)
+    await asyncio.sleep(20)
     coorinator.update_song_info(artist="Nirvana", song_title="Smells Like Teen Spirit")
-    await asyncio.sleep(5)
+    await asyncio.sleep(20)
     coorinator.shutdown()
-    await asyncio.sleep(2)
+    # await asyncio.sleep(2)
 
 if __name__ == '__main__':
     formatter = logging.Formatter(

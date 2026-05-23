@@ -4,7 +4,7 @@ from ..abstract_animator import AbstractAnimator
 
 class AbstractTextAnimator(AbstractAnimator):
     def __init__(self, **kwargs) -> None:
-        super().__init__()
+        super().__init__(**kwargs)
 
     @abstractmethod
     async def GetText(self) -> str:

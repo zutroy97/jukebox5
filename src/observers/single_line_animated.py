@@ -49,6 +49,7 @@ class SingleLineAnimatedObserver(ObserverBase):
         self._state : SingleLineAnimatedObserver.State = self.State.IDLE
         self._prevState : SingleLineAnimatedObserver.State = self.State.IDLE
         self._timer : datetime = datetime.now()
+        self._loopNow : datetime = datetime.now()
         self._line_animation : Type[AbstractTextAnimator] = Slide
         self._on_character_write_callback : Callable[[SingleLineAnimatedObserver, int, str], Awaitable[bool]] = self._default_on_character_write_callback
 
@@ -67,7 +68,7 @@ class SingleLineAnimatedObserver(ObserverBase):
         value = kwargs.get('value', self._text)
         if value != self._text:
             self._text = value
-            print(f"Received update for event type {update_type} with value: {value}")
+            #print(f"Received update for event type {update_type} with value: {value}")
             self._state = self.State.TEXT_UPDATED
 
     def changeAnimation(self, anim_type: Type[AbstractTextAnimator]):
@@ -76,13 +77,13 @@ class SingleLineAnimatedObserver(ObserverBase):
 
     async def loop(self) -> None:
         while self._is_running:
-            now = datetime.now()
-            if self._state not in [self.State.IDLE, self.State.ANIMATION_DELAY] and self._state != self._prevState:
-                print(f"State changed from {self._prevState} to {self._state}")
-                self._prevState = self._state
+            self._loopNow = datetime.now()
+            # if self._state not in [self.State.IDLE, self.State.ANIMATION_DELAY] and self._state != self._prevState:
+            #     print(f"State changed from {self._prevState} to {self._state}")
+            #     self._prevState = self._state
 
             if self._state is self.State.TEXT_UPDATED:
-                print(f"Creating animation for text: {self._text}")
+#                print(f"Creating animation for text: {self._text}")
                 await self._createAnimation()
                 self._state = self.State.START_ANIMATION
 
@@ -99,13 +100,13 @@ class SingleLineAnimatedObserver(ObserverBase):
                     for pos, c in chars:
                         await self._on_character_write_callback(self, pos, c)
                         #await self._driver.write_at_position(pos, c)
-                    self._timer = datetime.now() + timedelta(seconds=0.1)
+                    self._timer = self._loopNow + timedelta(seconds=0.1)
                     self._state = self.State.ANIMATION_DELAY
 
             elif self._state is self.State.ANIMATION_FINISHED:
                 if len(self._text) <= self._driver.Width:
                     self._state = self.State.IDLE
-                elif self._timer < now:
+                elif self._timer < self._loopNow:
                     self._state = self.State.START_ANIMATION
                     
 
@@ -115,19 +116,19 @@ class SingleLineAnimatedObserver(ObserverBase):
             self._setStateIfTimerElapsed(SingleLineAnimatedObserver.State.ANIMATION_LINE_FINISHED
                                              , SingleLineAnimatedObserver.State.ANIMATING)
 
-            await asyncio.sleep(0.01)
+            await asyncio.sleep(0)
         await self._driver.clear()
 
     def _setStateIfTimerElapsed(self, currentState: State, newState: State) -> bool:
         if self._state is not currentState:
             return False
-        if self._timer > datetime.now():
+        if self._timer > self._loopNow:
             return False
         self._state = newState
         return True
     
     async def _createAnimation(self) -> AnimationChain:
-        print(f"Creating animation chain for text: {self._text}")
+        #print(f"Creating animation chain for text: {self._text}")
         self._anim = AnimationChain(
             max_text_width=self._driver.Width,
             links=[
