@@ -1,5 +1,6 @@
 
 import asyncio
+import time
 from typing import Awaitable, Callable, Type
 
 from animations import AbstractTextAnimator, AnimationChain, AnimationChainLink, MultiLineGenerator, Slide, TextDiff, RandomTypeWriter
@@ -8,7 +9,6 @@ from .observer_base import UpdateEventType, ObserverBase
 from drivers import abstract_line_display
 
 from enum import Enum
-from datetime import datetime, timedelta
 
 class SingleLineAnimatedObserver(ObserverBase):
     class State(Enum):
@@ -19,6 +19,9 @@ class SingleLineAnimatedObserver(ObserverBase):
         ANIMATION_LINE_FINISHED = 4
         START_ANIMATION = 5
         ANIMATION_DELAY = 6
+        START_DISPLAY_CLEAR = 7
+        DISPLAY_CLEARING = 8
+        DISPLAY_CLEARED = 9
         # CHARACTER_ANIMATION_BEGIN = 7
         # CHARACTER_ANIMATING = 8
         # CHARACTER_ANIMATION_FINISHED = 9
@@ -30,14 +33,17 @@ class SingleLineAnimatedObserver(ObserverBase):
     
     async def on_animation_finished(self, anim: abstract_line_display) -> bool:
         self._state = self.State.ANIMATION_FINISHED
-        self._timer = datetime.now() + timedelta(seconds=2)
+        self.setDelaySeconds(2.0)
         return True 
 
     async def on_animation_line_finished(self, anim: abstract_line_display) -> bool:
-        #print(f"Animation line finished! - {anim.text}")
         self._state = self.State.ANIMATION_LINE_FINISHED
-        self._timer = datetime.now() + timedelta(seconds=1)
+        self._diff = TextDiff()
+        self.setDelaySeconds(1.0)
         return True
+
+    async def on_clear_display(self):
+        await self._driver.clear()
 
     def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
@@ -48,19 +54,16 @@ class SingleLineAnimatedObserver(ObserverBase):
         self._diff = TextDiff()
         self._state : SingleLineAnimatedObserver.State = self.State.IDLE
         self._prevState : SingleLineAnimatedObserver.State = self.State.IDLE
-        self._timer : datetime = datetime.now()
-        self._loopNow : datetime = datetime.now()
+        self._timer : float = time.monotonic()
+        self._loopNow : float = time.monotonic()
         self._line_animation : Type[AbstractTextAnimator] = Slide
         self._on_character_write_callback : Callable[[SingleLineAnimatedObserver, int, str], Awaitable[bool]] = self._default_on_character_write_callback
-
+        self._delay_s : float = 0.1
+        self._text_update_event = asyncio.Event()
 
     def UpdateReceived(self, update_type: UpdateEventType, **kwargs) -> None:
         '''Called when an update is received'''
         if self._event_type is None:
-            return
-        if update_type is UpdateEventType.SHUTDOWN:
-            #print(f"Received shutdown event with message: {kwargs.get('value', 'Shutting down')}")
-            self._is_running = False
             return
         if update_type != self._event_type:
             return
@@ -70,14 +73,21 @@ class SingleLineAnimatedObserver(ObserverBase):
             self._text = value
             #print(f"Received update for event type {update_type} with value: {value}")
             self._state = self.State.TEXT_UPDATED
+            self._text_update_event.set()
 
     def changeAnimation(self, anim_type: Type[AbstractTextAnimator]):
         self._line_animation = anim_type
         self._state = self.State.TEXT_UPDATED
 
+    async def shutdown(self, message: str, **kwargs) -> None:
+        '''Called when a shutdown event is received'''
+        self._is_running = False
+        self._text_update_event.set()
+        await self.on_clear_display()
+
     async def loop(self) -> None:
         while self._is_running:
-            self._loopNow = datetime.now()
+            self._loopNow = time.monotonic()
             # if self._state not in [self.State.IDLE, self.State.ANIMATION_DELAY] and self._state != self._prevState:
             #     print(f"State changed from {self._prevState} to {self._state}")
             #     self._prevState = self._state
@@ -86,11 +96,14 @@ class SingleLineAnimatedObserver(ObserverBase):
 #                print(f"Creating animation for text: {self._text}")
                 await self._createAnimation()
                 self._state = self.State.START_ANIMATION
+                continue
 
             elif self._state is self.State.START_ANIMATION:
-                await self._driver.clear()
+                await self.on_clear_display()
                 await self._anim.Start()
+                self._diff = TextDiff()
                 self._state = self.State.ANIMATING
+                continue
 
             elif self._state is self.State.ANIMATING: # ensures text has been set and animation has been created
                 next = await self._anim.Next()
@@ -99,25 +112,38 @@ class SingleLineAnimatedObserver(ObserverBase):
                     chars = self._diff.getDiff(text)
                     for pos, c in chars:
                         await self._on_character_write_callback(self, pos, c)
-                        #await self._driver.write_at_position(pos, c)
-                    self._timer = self._loopNow + timedelta(seconds=0.1)
+                    self.setDelaySeconds(0.01)
                     self._state = self.State.ANIMATION_DELAY
 
             elif self._state is self.State.ANIMATION_FINISHED:
                 if len(self._text) <= self._driver.Width:
                     self._state = self.State.IDLE
+                    self.setDelaySeconds(10.0)
                 elif self._timer < self._loopNow:
                     self._state = self.State.START_ANIMATION
-                    
-
+                    continue
+            
+            
             self._setStateIfTimerElapsed(SingleLineAnimatedObserver.State.ANIMATION_DELAY
                                          , SingleLineAnimatedObserver.State.ANIMATING)
             
             self._setStateIfTimerElapsed(SingleLineAnimatedObserver.State.ANIMATION_LINE_FINISHED
                                              , SingleLineAnimatedObserver.State.ANIMATING)
 
-            await asyncio.sleep(0)
-        await self._driver.clear()
+            #print(f"State: {self._state}, Timer: {self._timer}, LoopNow: {self._loopNow}, Sleeping for: {self._delay_s} seconds")
+            try:
+                await asyncio.wait_for(
+                    self._text_update_event.wait(),
+                    timeout=self._delay_s
+                )
+                self._text_update_event.clear()
+            except asyncio.TimeoutError:
+                pass
+
+
+    def setDelaySeconds(self, seconds: float):
+        self._delay_s = seconds
+        self._timer = time.monotonic() + seconds
 
     def _setStateIfTimerElapsed(self, currentState: State, newState: State) -> bool:
         if self._state is not currentState:

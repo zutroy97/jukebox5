@@ -7,7 +7,7 @@ class UpdateEventType(Enum):
     '''Defines the type of update received'''
     ARTIST = 1
     SONG_TITLE = 2
-    SHUTDOWN = 3
+
 
 class ObserverBase(ABC):
     def __init__(self, **kwargs) -> None:
@@ -24,9 +24,6 @@ class ObserverBase(ABC):
         elif update_type == UpdateEventType.SONG_TITLE:
             song_title = kwargs.get('value', 'Unknown Song Title')
             self.updated_song_title(song_title=song_title, **kwargs)
-        elif update_type == UpdateEventType.SHUTDOWN:
-            message = kwargs.get('value', 'Shutting down')
-            self.updated_shutdown(message=message, **kwargs)
 
     def updated_artist(self, artist: str, **kwargs) -> None:
         '''Called when the artist is updated'''
@@ -36,12 +33,13 @@ class ObserverBase(ABC):
         '''Called when the song title is updated'''
         pass
 
-    def updated_shutdown(self, message: str, **kwargs) -> None:
+    async def shutdown(self, message: str, **kwargs) -> None:
         '''Called when a shutdown event is received'''
         self._is_running = False
 
+    @abstractmethod
     async def loop(self) -> None:
         '''Called to start the observer's main loop'''
-        while self._is_running:
-            await asyncio.sleep(0.1)  # Simulate some work
+        pass
+
 
