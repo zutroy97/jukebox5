@@ -7,35 +7,36 @@ from observers import UpdateEventType, ObserverBase, TerminalObserver, Coordinat
 
                    
 async def main():
-    # driver = ldisp.pd1200Driver (port='/dev/serial0', baud=9600, width=20)
-    driver = ldisp.pd1200Driver (port='/dev/cu.Zooch3', baud=9600, width=20)
-    await driver.clear_screen()
-    await driver.normal_display_mode()
-    await driver.set_brightness(5)
-    
-    display0 = ldisp.pd1200LineDisplay(driver, line=0)
-    display1 = ldisp.pd1200LineDisplay(driver, line=1)
-
     coorinator = Coordinator()
+    
+    # driver = ldisp.pd1200Driver (port='/dev/serial0', baud=9600, width=20)
+    # vdfDriver = ldisp.pd1200Driver (port='/dev/cu.Zooch3', baud=9600, width=20)
+    # await vdfDriver.clear_screen()
+    # await vdfDriver.normal_display_mode()
+    # await vdfDriver.set_brightness(5)
+    
+    # vfdLine0 = ldisp.pd1200LineDisplay(vdfDriver, line=0)
+    # vfdLine1 = ldisp.pd1200LineDisplay(vdfDriver, line=1)
+
+    # vfd_song_title_observer = SingleLineAnimatedObserver(driver=vfdLine1, event_type=UpdateEventType.SONG_TITLE)
+    # vfd_song_title_observer.changeAnimation(RandomTypeWriter)
+    # coorinator.add_observer(vfd_song_title_observer)
+
+    # vfd_artist_observer = SingleLineAnimatedObserver(driver=vfdLine0, event_type=UpdateEventType.ARTIST)
+    # coorinator.add_observer(vfd_artist_observer)
+
+
     # terminal_observer = TerminalObserver()
     # coorinator.add_observer(terminal_observer)
-
-    single_line_observer0 = SingleLineAnimatedObserver(driver=display1, event_type=UpdateEventType.SONG_TITLE)
-    single_line_observer0.changeAnimation(RandomTypeWriter)
-    coorinator.add_observer(single_line_observer0)
-
-    single_line_observer1 = SingleLineAnimatedObserver(driver=display0, event_type=UpdateEventType.ARTIST)
-    coorinator.add_observer(single_line_observer1)
-
 
     led0 = ldisp.led16_display(addr=(0x70, 0x71))
     led1 = ldisp.led16_display(addr=(0x72, 0x73, 0x74))
 
-    single_line_observer2 = SingleLineAnimatedObserver(driver=led0, event_type=UpdateEventType.ARTIST)
-    coorinator.add_observer(single_line_observer2)
-    single_line_observer3 = SingleLineAnimatedObserver(driver=led1, event_type=UpdateEventType.SONG_TITLE)
-    coorinator.add_observer(single_line_observer3)
-    single_line_observer3.changeAnimation(RandomTypeWriter)
+    led_artist_observer = SingleLineAnimatedObserver(driver=led0, event_type=UpdateEventType.ARTIST)
+    coorinator.add_observer(led_artist_observer)
+    led_song_title_observer = SingleLineAnimatedObserver(driver=led1, event_type=UpdateEventType.SONG_TITLE)
+    coorinator.add_observer(led_song_title_observer)
+    led_song_title_observer.changeAnimation(RandomTypeWriter)
 
     asyncio.create_task(coorinator.loop())
     coorinator.update_song_info(artist="John Williams", song_title="Jurassic Park Theme")
