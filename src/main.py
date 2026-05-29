@@ -2,8 +2,7 @@ import drivers as ldisp
 import asyncio
 import logging
 from animations import TextDiff, RandomTypeWriter, MultiLineGenerator, Slide, AnimationChain, AnimationChainLink
-from observers import UpdateEventType, ObserverBase, TerminalObserver, Coordinator, SingleLineObserver, SingleLineAnimatedObserver
-
+from observers import UpdateEventType, ObserverBase, TerminalObserver, Coordinator, SingleLineObserver, SingleLineAnimatedObserver, SingleLineAnimatedSimpleObserver
 
                    
 async def main():
@@ -32,17 +31,17 @@ async def main():
     led0 = ldisp.led16_display(addr=(0x70, 0x71))
     led1 = ldisp.led16_display(addr=(0x72, 0x73, 0x74))
 
-    led_artist_observer = SingleLineAnimatedObserver(driver=led0, event_type=UpdateEventType.ARTIST)
+    led_artist_observer = SingleLineAnimatedSimpleObserver(driver=led0, event_type=UpdateEventType.ARTIST)
     coorinator.add_observer(led_artist_observer)
-    led_song_title_observer = SingleLineAnimatedObserver(driver=led1, event_type=UpdateEventType.SONG_TITLE)
+    led_song_title_observer = SingleLineAnimatedSimpleObserver(driver=led1, event_type=UpdateEventType.SONG_TITLE)
     coorinator.add_observer(led_song_title_observer)
-    led_song_title_observer.changeAnimation(RandomTypeWriter)
+    #led_song_title_observer.changeAnimation(RandomTypeWriter)
 
     asyncio.create_task(coorinator.loop())
-    coorinator.update_song_info(artist="John Williams", song_title="Jurassic Park Theme")
-    await asyncio.sleep(20)
+    # coorinator.update_song_info(artist="John Williams", song_title="Jurassic Park Theme")
+    # await asyncio.sleep(20)
     coorinator.update_song_info(artist="Nirvana", song_title="Smells Like Teen Spirit")
-    await asyncio.sleep(20)
+    await asyncio.sleep(10)
     await coorinator.shutdown()
   
 

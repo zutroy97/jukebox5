@@ -4,7 +4,7 @@ from .observer_base import ObserverBase, UpdateEventType
 
 class Coordinator:
     def __init__(self, **kwargs) -> None:
-        super().__init__()
+        #super().__init__()
         self._logger = logging.getLogger(__class__. __name__)
         self.observers : list[ObserverBase] = []
         self._observer_tasks : dict[ObserverBase, asyncio.Task] = {}
