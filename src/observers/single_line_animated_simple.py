@@ -114,17 +114,19 @@ class SingleLineAnimatedSimpleObserver(ObserverBase):
                     self.setDelaySeconds(self.delay_between_characters_s)
                     self._state = self.State.ANIMATION_DELAY
                 else:
-                    if await self.on_line_animation_finished(self):
-                        '''Line animation finished successfully, we can proceed to the next line or finish the animation'''
+                    if await self._text_generator.Next():
+                        # More lines to generate
                         self._state = self.State.ANIMATION_LINE_FINISHED
-                        if await self._text_generator.Next():
-                            # More lines to generate
-                            self._state = self.State.START_ANIMATION
-                            # TODO: Add a delay here if desired before starting the next line's animation
-                            continue
-                        else:
-                            self._state = self.State.ANIMATION_FINISHED
-                            continue
+                        continue
+                    else:
+                        self._state = self.State.ANIMATION_FINISHED
+                        continue
+
+            elif self._state is self.State.ANIMATION_LINE_FINISHED:
+                if await self.on_line_animation_finished(self):
+                    '''Line animation finished successfully, we can proceed to the next line or finish the animation'''                        
+                    self._state = self.State.START_ANIMATION
+                continue
             elif self._state is self.State.ANIMATION_FINISHED:
                 if len(self._text) <= self._driver.Width:
                     # If the text fits on the display, we can just stay idle until the next update.
