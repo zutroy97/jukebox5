@@ -23,11 +23,11 @@ class SingleLineObserver(ObserverBase):
             self._text = value
             self._textUpdateNeeded = True
 
-    async def loop(self) -> None:
+    async def draw(self) -> None:
         '''Called to start the observer's main loop'''
-        while self._is_running:
-            if self._textUpdateNeeded and self._driver is not None:
-                await self._driver.clear()
-                await self._driver.write(self._text)
-                self._textUpdateNeeded = False
-            await asyncio.sleep(0.1)  # Simulate some work
+
+        if self._textUpdateNeeded and self._driver is not None:
+            await self._driver.clear()
+            await self._driver.write(self._text)
+            self._textUpdateNeeded = False
+

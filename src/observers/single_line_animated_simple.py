@@ -66,6 +66,7 @@ class SingleLineAnimatedSimpleObserver(ObserverBase):
         self._driver : abstract_line_display = kwargs.get('driver', None)
         self._event_type : UpdateEventType = kwargs.get('event_type', None)
         self._text : str = ""
+        self._timer : float = 0.0
         self._state : SingleLineAnimatedSimpleObserver.State = self.State.IDLE
         self._prevState : SingleLineAnimatedSimpleObserver.State = self.State.IDLE
         self._line_animation : AbstractTextAnimator = Slide()
@@ -102,74 +103,50 @@ class SingleLineAnimatedSimpleObserver(ObserverBase):
         '''Called when a shutdown event is received'''
         await self._on_clear_display_callback(self)
 
-    async def loop(self) -> None:
-        while self._is_running:
-            self._loopNow = time.monotonic()
-            if self._state not in [self.State.IDLE, self.State.ANIMATION_DELAY] and self._state != self._prevState:
-                self._logger.debug(f"{self._event_type} State changed from {self._prevState} to {self._state}")
-                self._prevState = self._state
+    async def draw(self) -> None:
+        self._loopNow = time.monotonic()
+        # if self._state not in [self.State.IDLE, self.State.ANIMATION_DELAY] and self._state != self._prevState:
+        #     self._logger.debug(f"{self._event_type} State changed from {self._prevState} to {self._state}")
+        #     self._prevState = self._state
 
-            if self._state is self.State.TEXT_UPDATED:
-                self._text_generator = MultiLineGenerator(text=self._text, max_text_width=self._driver.Width)
-                await self._text_generator.Start()
-                self._state = self.State.START_ANIMATION
-                continue
+        if self._state is self.State.TEXT_UPDATED:
+            self._text_generator = MultiLineGenerator(text=self._text, max_text_width=self._driver.Width)
+            await self._text_generator.Start()
+            self._state = self.State.START_ANIMATION
 
-            elif self._state is self.State.START_ANIMATION:
-                if await self._on_clear_display_callback(self):
-                    # Clear was successful, we can start the animation immediately
-                    await self._createAnimation()
-                    self._state = self.State.ANIMATING
-                continue
+        if self._state is self.State.START_ANIMATION:
+            if await self._on_clear_display_callback(self):
+                # Clear was successful, we can start the animation immediately
+                await self._createAnimation()
+                self._state = self.State.ANIMATING
 
-            elif self._state is self.State.ANIMATING: # ensures text has been set and animation has been created
-                next = await self._line_animation.Next()
-                if next:
-                    text = await self._line_animation.GetText()
-                    chars = self._diff.getDiff(text)
-                    for pos, c in chars:
-                        #self._logger.debug(f"Writing character '{c}' at position {pos}")
-                        await self._on_character_write_callback(self, pos, c)
-                    self.setDelaySeconds(self.delay_between_characters_s)
-                    self._state = self.State.ANIMATION_DELAY
+        if self._state is self.State.ANIMATING: # ensures text has been set and animation has been created
+            next = await self._line_animation.Next()
+            if next:
+                text = await self._line_animation.GetText()
+                chars = self._diff.getDiff(text)
+                for pos, c in chars:
+                    #self._logger.debug(f"Writing character '{c}' at position {pos}")
+                    await self._on_character_write_callback(self, pos, c)
+                self.setDelaySeconds(self.delay_between_characters_s)
+                self._state = self.State.ANIMATION_DELAY
+            else:
+                if await self._text_generator.Next():
+                    # More lines to generate
+                    self._state = self.State.ANIMATION_LINE_FINISHED
                 else:
-                    if await self._text_generator.Next():
-                        # More lines to generate
-                        self._state = self.State.ANIMATION_LINE_FINISHED
-                        continue
-                    else:
-                        self._state = self.State.ANIMATION_FINISHED
-                        continue
+                    self._state = self.State.ANIMATION_FINISHED
 
-            elif self._state is self.State.ANIMATION_LINE_FINISHED:
-                if await self.on_line_animation_finished(self):
-                    '''Line animation finished successfully, we can proceed to the next line or finish the animation'''                        
-                    self._state = self.State.START_ANIMATION
-                continue
-            elif self._state is self.State.ANIMATION_FINISHED:
-                await self.on_animation_finished(self)
-                
-                # if len(self._text) <= self._driver.Width:
-                #     # If the text fits on the display, we can just stay idle until the next update.
-                #     # If it doesn't fit, we should restart the animation after a delay to keep it moving.
-                #     self._state = self.State.IDLE
-                #     self.setDelaySeconds(10.0)
-                # else:
-                #     # If the text doesn't fit on the display, we should restart 
-                #     # the animation after a delay to keep it moving.
-                #     await self._text_generator.Start()
-                #     self._state = self.State.START_ANIMATION
-                #     continue
-            
-            
-            self._setStateIfTimerElapsed(SingleLineAnimatedSimpleObserver.State.ANIMATION_DELAY
-                                         , SingleLineAnimatedSimpleObserver.State.ANIMATING)
-            
-            # self._setStateIfTimerElapsed(SingleLineAnimatedSimpleObserver.State.ANIMATION_LINE_FINISHED
-            #                                  , SingleLineAnimatedSimpleObserver.State.START_ANIMATION)
+        if self._state is self.State.ANIMATION_LINE_FINISHED:
+            if await self.on_line_animation_finished(self):
+                '''Line animation finished successfully, we can proceed to the next line or finish the animation'''                        
+                self._state = self.State.START_ANIMATION
+        elif self._state is self.State.ANIMATION_FINISHED:
+            await self.on_animation_finished(self)
 
-            #print(f"State: {self._state}, Timer: {self._timer}, LoopNow: {self._loopNow}, Sleeping for: {self._delay_s} seconds")
-            await asyncio.sleep(0.01)
+        self._setStateIfTimerElapsed(SingleLineAnimatedSimpleObserver.State.ANIMATION_DELAY
+                                        , SingleLineAnimatedSimpleObserver.State.ANIMATING)
+
 
 
     def setDelaySeconds(self, seconds: float):
@@ -190,6 +167,6 @@ class SingleLineAnimatedSimpleObserver(ObserverBase):
         initial_text = ''
         if await self._text_generator.Next():
             initial_text = await self._text_generator.GetText()
-        self._logger.debug(f"Starting animation with text: {initial_text}")
+        #self._logger.debug(f"Starting animation with text: {initial_text}")
         await self._line_animation.StartWithText(initial_text)
         self._diff = TextDiff()

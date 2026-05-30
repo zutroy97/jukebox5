@@ -7,22 +7,16 @@ class Coordinator:
         #super().__init__()
         self._logger = logging.getLogger(__class__. __name__)
         self.observers : list[ObserverBase] = []
-        self._observer_tasks : dict[ObserverBase, asyncio.Task] = {}
         self._running : bool = True
        
 
     def add_observer(self, observer: ObserverBase):
         if observer not in self.observers:
-            task = asyncio.create_task(observer.loop())
-            self._observer_tasks[observer] = task
             self.observers.append(observer)
 
     def remove_observer(self, observer: ObserverBase):
         if observer in self.observers:
             self.observers.remove(observer)
-            if observer in self._observer_tasks:
-                task = self._observer_tasks.pop(observer)
-                task.cancel()
 
     def notify_observers(self, update_type: UpdateEventType, value: str, **kwargs):
         for observer in self.observers:
@@ -32,23 +26,26 @@ class Coordinator:
     async def loop(self) -> None:
         self._running = True
         while self._running:
-            await asyncio.sleep(1.0)
-        await self.shutdown()
+            for observer in self.observers:
+                await observer.draw()
+            await asyncio.sleep(0.01)
+        #await self.shutdown()
     
     async def shutdown(self, message: str = "Shutting down coordinator"):
         self._running = False
-        
-        # Cancel all observer tasks
-        for observer, task in self._observer_tasks.items():
+        for observer in self.observers:
             await observer.shutdown(message=message)
-            if not task.done():
-                task.cancel()
+        # # Cancel all observer tasks
+        # for observer, task in self._observer_tasks.items():
+        #     await observer.shutdown(message=message)
+        #     if not task.done():
+        #         task.cancel()
         
-        # Wait for all tasks to complete
-        if self._observer_tasks:
-            await asyncio.gather(*self._observer_tasks.values(), return_exceptions=True)
+        # # Wait for all tasks to complete
+        # if self._observer_tasks:
+        #     await asyncio.gather(*self._observer_tasks.values(), return_exceptions=True)
         
-        self._observer_tasks.clear()
+        # self._observer_tasks.clear()
 
     def update_song_info(self, artist: str, song_title: str):
         self.notify_observers(update_type=UpdateEventType.ARTIST, value=artist)

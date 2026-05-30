@@ -38,8 +38,8 @@ class ObserverBase(ABC):
         self._is_running = False
 
     @abstractmethod
-    async def loop(self) -> None:
-        '''Called to start the observer's main loop'''
+    async def draw(self) -> None:
+        '''Called to draw the current state of the observer. Should be implemented by subclasses.'''
         pass
 
 
