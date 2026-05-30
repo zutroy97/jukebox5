@@ -35,13 +35,31 @@ class SingleLineAnimatedSimpleObserver(ObserverBase):
         return True
 
     
-    async def default_on_animation_finished(self, observer: SingleLineAnimatedSimpleObserver) -> bool:
-        if not hasattr(self, "_default_on_animation_finished_timer"):
-            self._default_on_animation_finished_timer : float = time.monotonic() + 2.0
-        if time.monotonic() < self._default_on_animation_finished_timer:
+    async def default_on_line_animation_finished(self, observer: SingleLineAnimatedSimpleObserver) -> bool:
+        if not hasattr(self, "_default_on_line_animation_finished_timer"):
+            self._default_on_line_animation_finished_timer : float = time.monotonic() + 2.0
+        if time.monotonic() < self._default_on_line_animation_finished_timer:
             return False
-        delattr(self, "_default_on_animation_finished_timer")
+        delattr(self, "_default_on_line_animation_finished_timer")
         return True
+    
+    async def default_on_animation_finished(self, observer: SingleLineAnimatedSimpleObserver) -> bool:
+        if len(observer._text) <= observer._driver.Width:
+            # If the text fits on the display, we can just stay idle until the next update.
+            # If it doesn't fit, we should restart the animation after a delay to keep it moving.
+            observer._state = self.State.IDLE
+            return True
+        else:
+            if not hasattr(self, "_default_on_animation_finished_timer"):
+                self._default_on_animation_finished_timer : float = time.monotonic() + 4.0
+            if time.monotonic() < self._default_on_animation_finished_timer:
+                return False
+            # If the text doesn't fit on the display, we should restart 
+            # the animation after a delay to keep it moving.
+            await observer._text_generator.Start()
+            observer._state = self.State.START_ANIMATION
+            delattr(self, "_default_on_animation_finished_timer")
+            return True    
     
     def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
@@ -55,7 +73,8 @@ class SingleLineAnimatedSimpleObserver(ObserverBase):
         self._on_clear_display_callback : Callable[[SingleLineAnimatedSimpleObserver], Awaitable[bool]] = self.default_on_clear_display
         self.delay_between_characters_s : float = 0.105
         '''Delay in seconds between writing each character during the animation. Can be adjusted to speed up or slow down the animation.'''
-        self.on_line_animation_finished : Callable[[SingleLineAnimatedSimpleObserver], Awaitable[bool]] = self.default_on_animation_finished
+        self.on_line_animation_finished : Callable[[SingleLineAnimatedSimpleObserver], Awaitable[bool]] = self.default_on_line_animation_finished
+        self.on_animation_finished : Callable[[SingleLineAnimatedSimpleObserver], Awaitable[bool]] = self.default_on_animation_finished
 
     def UpdateReceived(self, update_type: UpdateEventType, **kwargs) -> None:
         '''Called when an update is received'''
@@ -128,17 +147,19 @@ class SingleLineAnimatedSimpleObserver(ObserverBase):
                     self._state = self.State.START_ANIMATION
                 continue
             elif self._state is self.State.ANIMATION_FINISHED:
-                if len(self._text) <= self._driver.Width:
-                    # If the text fits on the display, we can just stay idle until the next update.
-                    # If it doesn't fit, we should restart the animation after a delay to keep it moving.
-                    self._state = self.State.IDLE
-                    self.setDelaySeconds(10.0)
-                else:
-                    # If the text doesn't fit on the display, we should restart 
-                    # the animation after a delay to keep it moving.
-                    await self._text_generator.Start()
-                    self._state = self.State.START_ANIMATION
-                    continue
+                await self.on_animation_finished(self)
+                
+                # if len(self._text) <= self._driver.Width:
+                #     # If the text fits on the display, we can just stay idle until the next update.
+                #     # If it doesn't fit, we should restart the animation after a delay to keep it moving.
+                #     self._state = self.State.IDLE
+                #     self.setDelaySeconds(10.0)
+                # else:
+                #     # If the text doesn't fit on the display, we should restart 
+                #     # the animation after a delay to keep it moving.
+                #     await self._text_generator.Start()
+                #     self._state = self.State.START_ANIMATION
+                #     continue
             
             
             self._setStateIfTimerElapsed(SingleLineAnimatedSimpleObserver.State.ANIMATION_DELAY
