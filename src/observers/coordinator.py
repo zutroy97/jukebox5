@@ -29,23 +29,11 @@ class Coordinator:
             for observer in self.observers:
                 await observer.draw()
             await asyncio.sleep(0.01)
-        #await self.shutdown()
     
     async def shutdown(self, message: str = "Shutting down coordinator"):
         self._running = False
         for observer in self.observers:
             await observer.shutdown(message=message)
-        # # Cancel all observer tasks
-        # for observer, task in self._observer_tasks.items():
-        #     await observer.shutdown(message=message)
-        #     if not task.done():
-        #         task.cancel()
-        
-        # # Wait for all tasks to complete
-        # if self._observer_tasks:
-        #     await asyncio.gather(*self._observer_tasks.values(), return_exceptions=True)
-        
-        # self._observer_tasks.clear()
 
     def update_song_info(self, artist: str, song_title: str):
         self.notify_observers(update_type=UpdateEventType.ARTIST, value=artist)

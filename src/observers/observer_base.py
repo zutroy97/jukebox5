@@ -5,9 +5,9 @@ import logging
 
 class UpdateEventType(Enum):
     '''Defines the type of update received'''
+    NOT_SPECIFIED = 0
     ARTIST = 1
     SONG_TITLE = 2
-
 
 class ObserverBase(ABC):
     def __init__(self, **kwargs) -> None:
