@@ -28,7 +28,7 @@ class Coordinator:
         while self._running:
             for observer in self.observers:
                 await observer.draw()
-            await asyncio.sleep(0.01)
+            await asyncio.sleep(0.001)
     
     async def shutdown(self, message: str = "Shutting down coordinator"):
         self._running = False

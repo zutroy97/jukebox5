@@ -2,7 +2,7 @@ import drivers as ldisp
 import asyncio
 import logging
 from animations import RandomTypeWriter, Slide
-from observers import UpdateEventType, Coordinator,  SingleTextLineAnimatedObserver, SingleTextLineStaticObserver
+from observers import UpdateEventType, Coordinator,  SingleTextLineAnimatedObserver, SingleLineLed16AnimatedObserver
 
 led0 = ldisp.led16_display(addr=(0x70, 0x71))
 led1 = ldisp.led16_display(addr=(0x72, 0x73, 0x74))
@@ -15,10 +15,10 @@ async def main():
 
 
 
-    led_artist_observer = SingleTextLineAnimatedObserver(driver=led0, event_type=UpdateEventType.ARTIST)
+    led_artist_observer = SingleLineLed16AnimatedObserver(driver=led0.Seg14x4, event_type=UpdateEventType.ARTIST)
     coorinator.add_observer(led_artist_observer)
-    led_song_title_observer = SingleTextLineAnimatedObserver(driver=led1, event_type=UpdateEventType.SONG_TITLE)
-    led_song_title_observer.delay_between_characters_s = 0.01
+    led_song_title_observer = SingleLineLed16AnimatedObserver(driver=led1.Seg14x4, event_type=UpdateEventType.SONG_TITLE)
+    led_song_title_observer.delay_between_characters_s = 0.001
     led_song_title_observer.changeAnimation((RandomTypeWriter()))
     coorinator.add_observer(led_song_title_observer)
 

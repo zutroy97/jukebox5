@@ -1,4 +1,5 @@
 
+from abc import abstractmethod
 import asyncio
 import time
 
@@ -20,9 +21,7 @@ class SingleLineAnimatedObserverBase(ObserverBase):
         
     def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
-        if "driver" not in kwargs:
-            raise TypeError("Missing required keyword argument: 'driver'")
-        self._driver : AbstractSingleLineDisplay = kwargs['driver']
+
         if "event_type" not in kwargs:
             raise TypeError("Missing required keyword argument: 'event_type'")
 
@@ -41,14 +40,13 @@ class SingleLineAnimatedObserverBase(ObserverBase):
         self.delay_after_animation_finished_s : float = 4.0
         '''Delay in seconds to wait after finishing animating the entire text before restarting the animation. Only applies if the text exceeds the display width and needs to be animated in multiple lines.'''
 
+    @abstractmethod
     async def on_character_write(self, pos: int, c: str) -> bool:
         '''Default callback for writing a character to the display. Can be overridden by setting the on_character_write_callback attribute.'''
-        await self._driver.write_at_position(pos, c)
-        return True
+        raise NotImplementedError()
     
     async def clear_display(self) -> None:
-        #self._state = ObserverStates.DISPLAY_CLEARING_START
-        await self._driver.clear()
+        raise NotImplementedError()
 
     async def on_state_display_clearing_start(self) -> None:
         '''Called when the state changes to DISPLAY_CLEARING_START.'''
@@ -56,7 +54,6 @@ class SingleLineAnimatedObserverBase(ObserverBase):
 
     async def on_state_display_clearing(self) -> None:
         '''Called when the state is DISPLAY_CLEARING. Must eventually transition to DISPLAY_CLEARED.'''
-        await self._driver.clear() # ensure display is cleared before transitioning to next state
         self._state = ObserverStates.DISPLAY_CLEARED
 
     async def on_state_display_cleared(self) -> None:
@@ -64,7 +61,7 @@ class SingleLineAnimatedObserverBase(ObserverBase):
         pass
 
     async def on_state_animation_finished(self) -> bool:
-        if len(self._text) <= self._driver.Width:
+        if len(self._text) <= self.DisplayWidth :
             # If the text fits on the display, we can just stay idle until the next update.
             # If it doesn't fit, we should restart the animation after a delay to keep it moving.
             self._state = ObserverStates.IDLE
@@ -114,7 +111,7 @@ class SingleLineAnimatedObserverBase(ObserverBase):
 
     async def on_state_text_updated(self) -> None:
         '''Called when the text is updated. Can be overridden by setting the on_text_updated_callback attribute.'''
-        self._text_generator = MultiLineGenerator(text=self._text, max_text_width=self._driver.Width)
+        self._text_generator = MultiLineGenerator(text=self._text, max_text_width=self.DisplayWidth)
         await self._text_generator.Start()
         self._state = ObserverStates.START_ANIMATION
 

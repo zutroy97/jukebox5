@@ -14,6 +14,8 @@ class ObserverBase(ABC):
         super().__init__()
         self._logger = logging.getLogger(self.__class__.__name__)
         self._is_running : bool = True
+        self.DisplayWidth : int = kwargs.get('display_width', 8)
+        '''The width of the display in characters.'''
 
     def UpdateReceived(self, update_type: UpdateEventType, **kwargs) -> None:
         '''Called when an update is received'''
