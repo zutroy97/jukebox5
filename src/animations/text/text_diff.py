@@ -5,7 +5,7 @@ class TextDiff:
         self._buffer = ['']
 
     def getDiff(self, newText : str
-        , ignoreChars = []
+        , ignoreChars = [' ']
         ) -> List[Tuple[int, str]]:
         output = []
         i = 0

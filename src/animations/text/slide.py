@@ -1,14 +1,14 @@
-from .base import TextAnimatorBase
+from .abstract_text_animator import AbstractTextAnimator
 import asyncio
 
-class Slide(TextAnimatorBase):
+class Slide(AbstractTextAnimator):
     def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
         self._position : int = 0
     
     async def Start(self) -> None:
         self._position = 1
-        self._text = self.text[:self.max_text_width] # truncate text to max width if necessary
+        self._text = self._text[:self.max_text_width] # truncate text to max width if necessary
 
     async def Next(self) -> bool:
         '''Returns true if more data is available'''
@@ -16,7 +16,7 @@ class Slide(TextAnimatorBase):
 
     async def GetText(self) -> str:
         '''Returns the text to be displayed'''
-        result = self.text[:self._position].ljust(self._max_text_width)
+        result = self._text[:self._position].ljust(self._max_text_width)
         self._position += 1
         return result 
 

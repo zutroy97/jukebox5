@@ -1,8 +1,8 @@
 import random
 import asyncio
-from .base import TextAnimatorBase
+from .abstract_text_animator import AbstractTextAnimator
 
-class RandomTypeWriter(TextAnimatorBase):
+class RandomTypeWriter(AbstractTextAnimator):
     def __init__(self,  **kwargs) -> None:
         super().__init__(**kwargs)
         self._character_queue = []

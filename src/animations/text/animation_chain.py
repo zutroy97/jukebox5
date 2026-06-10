@@ -1,22 +1,22 @@
-from typing import Type, TypeVar, Awaitable
+from typing import Type, Awaitable
 from collections.abc import Callable
-from .base import TextAnimatorBase
+from .abstract_text_animator import AbstractTextAnimator
 
 import asyncio
 
 class AnimationChainLink():
-    def __init__(self, anim_type: Type[TextAnimatorBase], onFinished: Callable[[TextAnimatorBase], Awaitable[bool]] | None = None) -> None:
+    def __init__(self, anim_type: Type[AbstractTextAnimator], onFinished: Callable[[AbstractTextAnimator], Awaitable[bool]] | None = None) -> None:
         if onFinished is not None and not callable(onFinished):
             raise TypeError("onFinished must be callable or None")
         self._anim_type = anim_type
         self._onFinished = onFinished
 
-class AnimationChain(TextAnimatorBase):
+class AnimationChain(AbstractTextAnimator):
     def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
         self._links : list[AnimationChainLink] = kwargs.get('links', [])
         self._args = kwargs
-        self._animators : list[TextAnimatorBase] = []
+        self._animators : list[AbstractTextAnimator] = []
 
     async def Start(self) -> None:
         self._animators = []

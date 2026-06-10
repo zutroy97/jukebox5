@@ -1,13 +1,12 @@
-from enum import Enum
 from abc import abstractmethod, ABC
 import logging
 
-class TextAnimatorBase(ABC):
+class AbstractAnimator(ABC):
     def __init__(self, **kwargs) -> None:
         super().__init__()
         self._logger = logging.getLogger()
         self._text = kwargs.get('text', '')
-        self._done : bool = False
+#        self._done : bool = False
         self._max_text_width = kwargs.get('max_text_width', 20)
 
     @property
@@ -17,11 +16,6 @@ class TextAnimatorBase(ABC):
     @property
     def text(self) -> str:
         return self._text
-
-    @abstractmethod
-    async def GetText(self) -> str:
-        '''Returns the text to be displayed'''
-        return ""
     
     @abstractmethod
     async def Next(self) -> bool:
@@ -31,8 +25,5 @@ class TextAnimatorBase(ABC):
     @abstractmethod
     async def Start(self) -> None:
         '''Start/Restarts the animation'''
-        pass
-    
-
-
-        
+        pass    
+       

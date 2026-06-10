@@ -1,25 +1,24 @@
 import textwrap
-from .base import TextAnimatorBase
 import asyncio
 
-class MultiLineGenerator(TextAnimatorBase):
+from .abstract_text_animator import AbstractTextAnimator
+
+class MultiLineGenerator(AbstractTextAnimator):
     '''Animates text by splitting it into multiple lines and displaying each line one at a time.'''
     def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
+        self._lines : list[str] = []
 
     async def Start(self) -> None:
         self._lines = textwrap.wrap(self.text, width=self.max_text_width, expand_tabs=False, drop_whitespace=True)
         self._done = False
-        await asyncio.sleep(0) # yield control to the event loop
 
     async def Next(self) -> bool:
         '''Returns true if more data is available'''
-        await asyncio.sleep(0) # yield control to the event loop
         return len(self._lines) > 0
 
     async def GetText(self) -> str:
         '''Returns the text to be displayed'''
-        await asyncio.sleep(0) # yield control to the event loop
         return self._lines.pop(0)
 
 async def main():
