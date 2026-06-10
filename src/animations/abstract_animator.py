@@ -6,7 +6,7 @@ class AbstractAnimator(ABC):
         super().__init__()
         self._logger = logging.getLogger()
         self._text = kwargs.get('text', '')
-        self._done : bool = False
+#        self._done : bool = False
         self._max_text_width = kwargs.get('max_text_width', 20)
 
     @property

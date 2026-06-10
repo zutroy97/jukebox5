@@ -1,15 +1,18 @@
+from ..observer_base import UpdateEventType, ObserverBase
+from drivers.abstract_line_display import AbstractSingleLineDisplay
 
-import asyncio
-
-from .observer_base import UpdateEventType, ObserverBase
-from drivers import abstract_line_display
-
-class SingleLineObserver(ObserverBase):
+class SingleTextLineStaticObserver(ObserverBase):
 
     def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
-        self._driver : abstract_line_display = kwargs.get('driver', None)
-        self._event_type : UpdateEventType = kwargs.get('event_type', None)
+        if "driver" not in kwargs:
+            raise TypeError("Missing required keyword argument: 'driver'")
+        self._driver : AbstractSingleLineDisplay = kwargs['driver']
+       
+        if "event_type" not in kwargs:
+            raise TypeError("Missing required keyword argument: 'event_type'")
+        self._event_type : UpdateEventType = kwargs['event_type']
+
         self._text : str = ""
         self._textUpdateNeeded : bool = False
 
@@ -25,7 +28,6 @@ class SingleLineObserver(ObserverBase):
 
     async def draw(self) -> None:
         '''Called to start the observer's main loop'''
-
         if self._textUpdateNeeded and self._driver is not None:
             await self._driver.clear()
             await self._driver.write(self._text)
