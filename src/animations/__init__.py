@@ -13,7 +13,9 @@ from .led_16.led16_static import LED16Static
 from .led_16.abstract_led16_animator import AbstractLED16Animator
 from .led_16.text_animator_adapter import LED16TextAnimatorAdapter
 
+
 __all__ = ['AlienLED16Animator', 'LED16Static', 'LED16TextAnimatorAdapter',
             'AbstractTextAnimator', 'MultiLineGenerator', 'RandomTypeWriter', 'Slide',
              'TextDiff', 'AnimationChainLink', 'AnimationChain', 'AbstractLED16Animator'
-             , 'Static']
+             , 'Static'
+            ]
