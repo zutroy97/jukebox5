@@ -8,7 +8,6 @@ class Coordinator:
         self._logger = logging.getLogger(__class__. __name__)
         self.observers : list[ObserverBase] = []
         self._running : bool = True
-       
 
     def add_observer(self, observer: ObserverBase):
         if observer not in self.observers:

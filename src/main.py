@@ -3,6 +3,7 @@ import asyncio
 import logging
 from animations import RandomTypeWriter, Slide
 from observers import UpdateEventType, Coordinator,  SingleTextLineAnimatedObserver, SingleLineLed16AnimatedObserver
+from observers.text.single_text_line_animated import SingleTextLineAnimatedClearObserver
 
 led0 = ldisp.led16_display(addr=(0x70, 0x71))
 led1 = ldisp.led16_display(addr=(0x72, 0x73, 0x74))
@@ -10,24 +11,30 @@ led1 = ldisp.led16_display(addr=(0x72, 0x73, 0x74))
 async def main():
     coorinator = Coordinator()
 
-    # terminal_observer = TerminalObserver()
-    # coorinator.add_observer(terminal_observer)
-
-
-
-    led_artist_observer = SingleLineLed16AnimatedObserver(driver=led0.Seg14x4, event_type=UpdateEventType.ARTIST)
+    #led_artist_observer = SingleLineLed16AnimatedObserver(driver=led0.Seg14x4, event_type=UpdateEventType.ARTIST)
+    led_artist_observer = SingleTextLineAnimatedClearObserver(driver=led0, event_type=UpdateEventType.ARTIST)
+    led_artist_observer.delay_between_characters_s = 0.01
     coorinator.add_observer(led_artist_observer)
-    led_song_title_observer = SingleLineLed16AnimatedObserver(driver=led1.Seg14x4, event_type=UpdateEventType.SONG_TITLE)
-    led_song_title_observer.delay_between_characters_s = 0.001
-    led_song_title_observer.changeAnimation((RandomTypeWriter()))
+    
+    led_song_title_observer = SingleTextLineAnimatedClearObserver(driver=led1, event_type=UpdateEventType.SONG_TITLE)    
+    # led_song_title_observer = SingleLineLed16AnimatedObserver(driver=led1.Seg14x4, event_type=UpdateEventType.SONG_TITLE)
+    led_song_title_observer.delay_between_characters_s = 0.01
+    led_song_title_observer.changeAnimation(RandomTypeWriter())
     coorinator.add_observer(led_song_title_observer)
 
 
     asyncio.create_task(coorinator.loop())
+    coorinator.update_song_info(artist="Chumbawamba", song_title="Tubthumping (I Get Knocked Down)")
+    await asyncio.sleep(10)    
     coorinator.update_song_info(artist="Conway Twitty", song_title="Hello Darlin'")
     await asyncio.sleep(10)
     coorinator.update_song_info(artist="Kiss", song_title="I Was Made For Lovin' You")
-    await asyncio.sleep(10)    
+    await asyncio.sleep(10)
+
+    # coorinator.remove_observer(led_artist_observer)
+    # led_artist_observer = SingleTextLineAnimatedObserver(driver=led0, event_type=UpdateEventType.ARTIST)
+    # coorinator.add_observer(led_artist_observer)
+
     coorinator.update_song_info(artist="Johnny Cash & June Carter", song_title="Jackson")
     await asyncio.sleep(10)
     coorinator.update_song_info(artist="John Williams", song_title="Jurassic Park Theme")

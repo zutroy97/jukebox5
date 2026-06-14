@@ -16,7 +16,7 @@ class LED16Static(AbstractLED16Animator):
         return False
 
     async def GetSegments(self) -> list[int]:
-        return self.string_to_char_mask(self.text)[:self.max_text_width]
+        return self.string_to_char_mask(self.text[:self.max_text_width])
     
 
     

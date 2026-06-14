@@ -189,5 +189,6 @@ class SingleLineAnimatedObserverBase(ObserverBase):
         if await self._text_generator.Next():
             initial_text = await self._text_generator.GetText()
         #self._logger.debug(f"Starting animation with text: {initial_text}")
+        self._line_animation.max_text_width = self.DisplayWidth
         await self._line_animation.StartWithText(initial_text)
         self._diff = TextDiff()

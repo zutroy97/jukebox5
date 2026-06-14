@@ -13,9 +13,17 @@ class AbstractAnimator(ABC):
     def max_text_width(self) -> int:
         return self._max_text_width
     
+    @max_text_width.setter
+    def max_text_width(self, value: int) -> None:
+        self._max_text_width = value
+    
     @property
     def text(self) -> str:
         return self._text
+
+    @text.setter
+    def text(self, value: str) -> None:
+        self._text = value
     
     @abstractmethod
     async def Next(self) -> bool:
