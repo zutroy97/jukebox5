@@ -13,9 +13,11 @@ class AbstractClearTextAnimator(ABC):
     def __init__(self) -> None:
         super().__init__()
         self._finishedState : ObserverStates = ObserverStates.DISPLAY_CLEARED
+        self._observer : "SingleTextLineAnimatedObserver"
+
     @abstractmethod
     async def Handle(self, textAnimator: "SingleTextLineAnimatedObserver") -> None:
-        pass
+        self._observer = textAnimator
 
     @property
     def StateWhenFinished(self) -> ObserverStates:
@@ -37,11 +39,9 @@ class ClearTextBlankLeftToRightAnimator(AbstractClearTextAnimator):
         self._animation_clear_segment : int = 0
         self._next_animation_tick : float = 0.0
         self.delay_between_characters_s : float = 0.0010
-        self._observer : "SingleTextLineAnimatedObserver"
-
 
     async def Handle(self, textAnimator: "SingleTextLineAnimatedObserver") -> None:
-        self._observer = textAnimator
+        await super().Handle(textAnimator)
         if self._observer._state is ObserverStates.DISPLAY_CLEARING_START:
             await self.on_state_display_clearing_start()
         elif self._observer._state is ObserverStates.DISPLAY_CLEARING:
@@ -61,4 +61,5 @@ class ClearTextBlankLeftToRightAnimator(AbstractClearTextAnimator):
         if time.monotonic() >= self._next_animation_tick:
             await self._observer.DisplayDriver.write_at_position(self._animation_clear_segment, ' ')
             self._animation_clear_segment += 1
-            self._next_animation_tick = time.monotonic() + self.delay_between_characters_s            
+            self._next_animation_tick = time.monotonic() + self.delay_between_characters_s
+

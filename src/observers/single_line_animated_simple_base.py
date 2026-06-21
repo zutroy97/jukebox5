@@ -32,6 +32,8 @@ class SingleLineAnimatedObserverBase(ObserverBase):
         self._prevState : ObserverStates = ObserverStates.IDLE
         self._line_animation : AbstractTextAnimator = Slide()
         self._timers : dict[ObserverStates, SingleLineAnimatedObserverBase.AnimationDelayTimer] = {}
+        self.auto_loop : bool = True
+        '''When the entire line has been displayed, should it restart automatically'''
 
         self.delay_between_characters_s : float = 0.02
         '''Delay in seconds between writing each character during the animation. Can be adjusted to speed up or slow down the animation.'''
@@ -48,8 +50,23 @@ class SingleLineAnimatedObserverBase(ObserverBase):
     async def clear_display(self) -> None:
         raise NotImplementedError()
 
+    @property
+    def Value(self):
+        return self._text
+    
+    @Value.setter
+    def Value(self, text:str):
+        if text != self._text:
+            self._text = text
+            #print(f"Received update for event type {update_type} with value: {value}")
+            self._state = ObserverStates.TEXT_UPDATED        
+
     async def on_state_animation_finished(self) -> bool:
-        if len(self._text) <= self.DisplayWidth :
+        if not self.auto_loop:
+            self._state = ObserverStates.ANIMATION_FINISHED_DELAY
+            self.addTimer(ObserverStates.ANIMATION_FINISHED_DELAY, ObserverStates.IDLE, self.delay_after_animation_finished_s) # add a timer to automatically restart the animation after a delay
+            return True
+        if len(self._text) <= self.DisplayWidth:
             # If the text fits on the display, we can just stay idle until the next update.
             # If it doesn't fit, we should restart the animation after a delay to keep it moving.
             self._state = ObserverStates.IDLE
@@ -82,11 +99,8 @@ class SingleLineAnimatedObserverBase(ObserverBase):
         if update_type != self._event_type:
             return
     
-        value = kwargs.get('value', self._text)
-        if value != self._text:
-            self._text = value
-            #print(f"Received update for event type {update_type} with value: {value}")
-            self._state = ObserverStates.TEXT_UPDATED
+        self.Value = kwargs.get('value', self._text)
+
 
     def changeAnimation(self, anim_type: AbstractTextAnimator):
         '''Changes the animation type for this observer. The new animation will be used the next time the text is updated.'''
