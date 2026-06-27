@@ -105,7 +105,8 @@ class SingleLineAnimatedObserverBase(ObserverBase):
     def changeAnimation(self, anim_type: AbstractTextAnimator):
         '''Changes the animation type for this observer. The new animation will be used the next time the text is updated.'''
         self._line_animation = anim_type
-        self._state = ObserverStates.TEXT_UPDATED # forces animation to be recreated with new type
+        if self._state is not ObserverStates.IDLE:
+            self._state = ObserverStates.TEXT_UPDATED # forces animation to be recreated with new type
 
     async def shutdown(self, message: str, **kwargs) -> None:
         '''Called when a shutdown event is received'''

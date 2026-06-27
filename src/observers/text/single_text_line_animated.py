@@ -22,7 +22,6 @@ class SingleTextLineAnimatedObserver(SingleLineAnimatedObserverBase):
         return True
     
     async def clear_display(self) -> None:
-        #await self.DisplayDriver.clear()
         self._state = ObserverStates.DISPLAY_CLEARING_START
         self.ClearDisplayAnimation.StateWhenFinished = ObserverStates.START_ANIMATION
 

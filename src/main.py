@@ -16,6 +16,8 @@ async def main():
     led_artist_observer = SingleTextLineAnimatedObserver(driver=led0, event_type=UpdateEventType.ARTIST)
     led_artist_observer.delay_between_characters_s = 0.01
     led_artist_observer.delay_after_animation_finished_s = 2
+    #led_artist_observer.changeAnimation(RandomTypeWriter())
+    # led_artist_observer.ClearDisplayAnimation = ClearTextBlankLeftToRightAnimator()    
     #coorinator.add_observer(led_artist_observer)
     
     led_song_title_observer = SingleTextLineAnimatedObserver(driver=led1, event_type=UpdateEventType.SONG_TITLE)    
@@ -24,7 +26,6 @@ async def main():
     led_song_title_observer.delay_after_animation_finished_s = 2
     led_song_title_observer.changeAnimation(RandomTypeWriter())
     led_song_title_observer.ClearDisplayAnimation = ClearTextBlankLeftToRightAnimator()
-    #coorinator.add_observer(led_song_title_observer)
 
     kv_observer = KeyValueTextObserver(key_driver = led_artist_observer, value_driver=led_song_title_observer)
     coorinator.add_observer(kv_observer)

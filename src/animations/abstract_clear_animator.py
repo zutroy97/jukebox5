@@ -36,6 +36,7 @@ class ClearTextImmediatelyAnimator(AbstractClearTextAnimator):
 
 class ClearTextBlankLeftToRightAnimator(AbstractClearTextAnimator):
     def __init__(self):
+        super().__init__()
         self._animation_clear_segment : int = 0
         self._next_animation_tick : float = 0.0
         self.delay_between_characters_s : float = 0.0010

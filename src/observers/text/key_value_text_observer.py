@@ -20,11 +20,13 @@ class KeyValueTextObserver(ObserverBase):
 
     async def draw(self) -> None:
         '''Called to draw the current state of the observer. Should be implemented by subclasses.'''
+        #self._logger.debug(f"keyState= {self._key_driver._state} valueState= {self._value_driver._state}")
         if len(self._display_keys) == 0:
             self._display_keys = list(self._db.keys())
             # await self._key_driver.clear_display()
             # await self._value_driver.clear_display()
-        elif self._key_driver._state in [ObserverStates.ANIMATION_FINISHED, ObserverStates.IDLE] and self._value_driver._state in [ObserverStates.ANIMATION_FINISHED, ObserverStates.IDLE]:
+        if len(self._display_keys) and self._key_driver._state in [ObserverStates.ANIMATION_FINISHED, ObserverStates.IDLE] \
+            and self._value_driver._state in [ObserverStates.ANIMATION_FINISHED, ObserverStates.IDLE]:
             # time to update the displays
             key = self._display_keys.pop()
             self._key_driver.Value = key

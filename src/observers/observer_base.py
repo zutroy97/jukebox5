@@ -8,6 +8,9 @@ class UpdateEventType(Enum):
     NOT_SPECIFIED = 0
     ARTIST = 1
     SONG_TITLE = 2
+    PING = 3
+    NO_EVENT_RECEIVED_TIMEOUT = 4
+    '''No event has been received in the timeout period'''
 
 class ObserverBase(ABC):
     def __init__(self, **kwargs) -> None:
@@ -26,6 +29,8 @@ class ObserverBase(ABC):
         elif update_type == UpdateEventType.SONG_TITLE:
             song_title = kwargs.get('value', 'Unknown Song Title')
             self.updated_song_title(song_title=song_title, **kwargs)
+        elif update_type is UpdateEventType.NO_EVENT_RECEIVED_TIMEOUT:
+            self.timeout_expired()
 
     def updated_artist(self, artist: str, **kwargs) -> None:
         '''Called when the artist is updated'''
@@ -38,6 +43,9 @@ class ObserverBase(ABC):
     async def shutdown(self, message: str, **kwargs) -> None:
         '''Called when a shutdown event is received'''
         self._is_running = False
+
+    def timeout_expired(self):
+        self._logger.debug("Timeout expired!")
 
     @abstractmethod
     async def draw(self) -> None:
