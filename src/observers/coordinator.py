@@ -1,5 +1,7 @@
 import logging
 import asyncio
+
+from panel.panel_input_base import JukeboxPanelInputBase, JukeboxPanelOutputBase
 from .observer_base import ObserverBase, UpdateEventType
 import time
 
@@ -11,7 +13,11 @@ class Coordinator:
         self.observers : list[ObserverBase] = []
         self._running : bool = True
         self._timeout : float = -1.0
+        self._panelButton : JukeboxPanelInputBase = kwargs['panelButtons']
+        self._panelDisplay : JukeboxPanelOutputBase = kwargs['panelDisplay']
+        self._updateCount : int = 0
         self._reset_timeout()
+        self.updateJukeboxDisplay()
 
     def add_observer(self, observer: ObserverBase):
         if observer not in self.observers:
@@ -46,6 +52,14 @@ class Coordinator:
     def update_song_info(self, artist: str, song_title: str):
         self.notify_observers(update_type=UpdateEventType.ARTIST, value=artist)
         self.notify_observers(update_type=UpdateEventType.SONG_TITLE, value=song_title)
+        self._updateCount += 1
+        self.updateJukeboxDisplay()
 
     def _reset_timeout(self):
         self._timeout = time.monotonic() + Coordinator.TimeoutLimitInSeconds
+
+    def updateJukeboxDisplay(self):
+        x = self._updateCount % 2
+        self._panelDisplay.LeftLedSet(x == 1)
+        self._panelDisplay.RightLedSet(x == 0)
+        self._panelDisplay.WriteToThreeDigitDisplay(str(self._updateCount))
