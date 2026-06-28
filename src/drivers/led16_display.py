@@ -29,8 +29,7 @@ class led16_display(abstract_line_display.AbstractSingleLineDisplay):
     
     @property
     def Width(self):
-        return self._display.i2c_device * 4
-        self._logger = logging.getLogger(__class__.__name__ )
+        return self._width
 
     def _clear_line(self):
         self._display.fill(0)
@@ -53,9 +52,4 @@ class led16_display(abstract_line_display.AbstractSingleLineDisplay):
 
     async def set_position(self, position: int):
         '''Set the cursor position on the display.'''
-        self._position = position
-
-    @property
-    def Width(self) -> int:
-        '''Get the width of the display.'''
-        return self._width    
+        self._position = position    

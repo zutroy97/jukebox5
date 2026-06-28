@@ -32,6 +32,8 @@ class SingleLineAnimatedObserverBase(ObserverBase):
         self._prevState : ObserverStates = ObserverStates.IDLE
         self._line_animation : AbstractTextAnimator = Slide()
         self._timers : dict[ObserverStates, SingleLineAnimatedObserverBase.AnimationDelayTimer] = {}
+        self.auto_loop : bool = True
+        '''When the entire line has been displayed, should it restart automatically'''
 
         self.delay_between_characters_s : float = 0.02
         '''Delay in seconds between writing each character during the animation. Can be adjusted to speed up or slow down the animation.'''
@@ -48,27 +50,30 @@ class SingleLineAnimatedObserverBase(ObserverBase):
     async def clear_display(self) -> None:
         raise NotImplementedError()
 
-    async def on_state_display_clearing_start(self) -> None:
-        '''Called when the state changes to DISPLAY_CLEARING_START.'''
-        self._state = ObserverStates.DISPLAY_CLEARING
-
-    async def on_state_display_clearing(self) -> None:
-        '''Called when the state is DISPLAY_CLEARING. Must eventually transition to DISPLAY_CLEARED.'''
-        self._state = ObserverStates.DISPLAY_CLEARED
-
-    async def on_state_display_cleared(self) -> None:
-        '''Called when the state changes to DISPLAY_CLEARED.'''
-        pass
+    @property
+    def Value(self):
+        return self._text
+    
+    @Value.setter
+    def Value(self, text:str):
+        if text != self._text:
+            self._text = text
+            #print(f"Received update for event type {update_type} with value: {value}")
+            self._state = ObserverStates.TEXT_UPDATED        
 
     async def on_state_animation_finished(self) -> bool:
-        if len(self._text) <= self.DisplayWidth :
+        if not self.auto_loop:
+            self._state = ObserverStates.ANIMATION_FINISHED_DELAY
+            self.addTimer(ObserverStates.ANIMATION_FINISHED_DELAY, ObserverStates.IDLE, self.delay_after_animation_finished_s) # add a timer to automatically restart the animation after a delay
+            return True
+        if len(self._text) <= self.DisplayWidth:
             # If the text fits on the display, we can just stay idle until the next update.
             # If it doesn't fit, we should restart the animation after a delay to keep it moving.
             self._state = ObserverStates.IDLE
         else:
             await self._text_generator.Start() # restart the text generator to loop the animation
             self._state = ObserverStates.ANIMATION_FINISHED_DELAY
-            self.addTimer(ObserverStates.ANIMATION_FINISHED_DELAY, ObserverStates.START_ANIMATION, self.delay_after_animation_finished_s) # add a timer to automatically restart the animation after a delay
+            self.addTimer(ObserverStates.ANIMATION_FINISHED_DELAY, ObserverStates.ANIMATION_FINISHED_DELAY_COMPLETE, self.delay_after_animation_finished_s) # add a timer to automatically restart the animation after a delay
         return True
 
     def addTimer(self, from_state: ObserverStates, to_state: ObserverStates, delay_s: float):
@@ -94,16 +99,14 @@ class SingleLineAnimatedObserverBase(ObserverBase):
         if update_type != self._event_type:
             return
     
-        value = kwargs.get('value', self._text)
-        if value != self._text:
-            self._text = value
-            #print(f"Received update for event type {update_type} with value: {value}")
-            self._state = ObserverStates.TEXT_UPDATED
+        self.Value = kwargs.get('value', self._text)
+
 
     def changeAnimation(self, anim_type: AbstractTextAnimator):
         '''Changes the animation type for this observer. The new animation will be used the next time the text is updated.'''
         self._line_animation = anim_type
-        self._state = ObserverStates.TEXT_UPDATED # forces animation to be recreated with new type
+        if self._state is not ObserverStates.IDLE:
+            self._state = ObserverStates.TEXT_UPDATED # forces animation to be recreated with new type
 
     async def shutdown(self, message: str, **kwargs) -> None:
         '''Called when a shutdown event is received'''
@@ -143,13 +146,18 @@ class SingleLineAnimatedObserverBase(ObserverBase):
                 self._state = ObserverStates.ANIMATION_FINISHED
 
     async def on_state_animation_line_finished(self) -> None:
-        '''Called when the state is ANIMATION_LINE_FINISHED. Can be overridden by setting the on_line_animation_finished_callback attribute.'''
-        self.addTimer(ObserverStates.ANIMATION_LINE_FINISHED_DELAY, ObserverStates.START_ANIMATION, self.delay_after_line_finished_s)
+        self.addTimer(ObserverStates.ANIMATION_LINE_FINISHED_DELAY, ObserverStates.ANIMATION_LINE_FINISHED_DELAY_COMPLETE, self.delay_after_line_finished_s)
         self._state = ObserverStates.ANIMATION_LINE_FINISHED_DELAY
+        
+    async def on_state_animation_finished_delay_complete(self) -> None:
+        self._state = ObserverStates.START_ANIMATION
         
     async def on_post_draw(self) -> None:
         '''Called at the end of each draw cycle, after all state-specific logic has been executed.'''
         pass
+
+    async def on_state_animation_line_finished_delay_complete(self) -> None:
+        self._state = ObserverStates.START_ANIMATION
 
     async def draw(self) -> None:
         self._loopNow = time.monotonic()
@@ -162,23 +170,25 @@ class SingleLineAnimatedObserverBase(ObserverBase):
         if self._state is ObserverStates.TEXT_UPDATED:
             await self.on_state_text_updated()
 
-        if self._state is ObserverStates.DISPLAY_CLEARING_START:
-            await self.on_state_display_clearing_start()
-        if self._state is ObserverStates.DISPLAY_CLEARING:
-            await self.on_state_display_clearing()
-        if self._state is ObserverStates.DISPLAY_CLEARED:
-            await self.on_state_display_cleared()
+        # if self._state is ObserverStates.DISPLAY_CLEARING_START:
+        #     await self.on_state_display_clearing_start()
+        # if self._state is ObserverStates.DISPLAY_CLEARING:
+        #     await self.on_state_display_clearing()
+        # if self._state is ObserverStates.DISPLAY_CLEARED:
+        #     await self.on_state_display_cleared()
+
         if self._state is ObserverStates.START_ANIMATION:
             await self.on_state_start_animation()
-
         if self._state is ObserverStates.ANIMATING: # ensures text has been set and animation has been created
             await self.on_state_animating()
-
         if self._state is ObserverStates.ANIMATION_LINE_FINISHED:
             await self.on_state_animation_line_finished()
-        
         if self._state is  ObserverStates.ANIMATION_FINISHED:
             await self.on_state_animation_finished()
+        if self._state is ObserverStates.ANIMATION_LINE_FINISHED_DELAY_COMPLETE:
+            await self.on_state_animation_line_finished_delay_complete()
+        if self._state is ObserverStates.ANIMATION_FINISHED_DELAY_COMPLETE:
+            await self.on_state_animation_finished_delay_complete()
 
         await self.on_post_draw()
         self._checkTimers() # ensure timers are checked at the end of the draw cycle as well, in case any state changes occurred that would affect the timers 
