@@ -1,4 +1,3 @@
-import asyncio
 from enum import Enum
 from abc import abstractmethod, ABC
 import logging
@@ -40,7 +39,7 @@ class ObserverBase(ABC):
         '''Called when the song title is updated'''
         pass
 
-    async def shutdown(self, message: str, **kwargs) -> None:
+    def shutdown(self, message: str, **kwargs) -> None:
         '''Called when a shutdown event is received'''
         self._is_running = False
 
@@ -48,7 +47,7 @@ class ObserverBase(ABC):
         self._logger.debug("Timeout expired!")
 
     @abstractmethod
-    async def draw(self) -> None:
+    def draw(self) -> None:
         '''Called to draw the current state of the observer. Should be implemented by subclasses.'''
         pass
 

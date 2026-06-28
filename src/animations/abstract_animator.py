@@ -26,12 +26,12 @@ class AbstractAnimator(ABC):
         self._text = value
     
     @abstractmethod
-    async def Next(self) -> bool:
+    def Next(self) -> bool:
         '''Returns true if more data is available'''
         return False
     
     @abstractmethod
-    async def Start(self) -> None:
+    def Start(self) -> None:
         '''Start/Restarts the animation'''
         pass    
        

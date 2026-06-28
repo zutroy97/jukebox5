@@ -18,7 +18,7 @@ class KeyValueTextObserver(ObserverBase):
         self._db : dict[str, str] = {}
         self._display_keys = []
 
-    async def draw(self) -> None:
+    def draw(self) -> None:
         '''Called to draw the current state of the observer. Should be implemented by subclasses.'''
         #self._logger.debug(f"keyState= {self._key_driver._state} valueState= {self._value_driver._state}")
         if len(self._display_keys) == 0:
@@ -31,8 +31,8 @@ class KeyValueTextObserver(ObserverBase):
             key = self._display_keys.pop()
             self._key_driver.Value = key
             self._value_driver.Value = self._db[key]
-        await self._key_driver.draw()
-        await self._value_driver.draw()
+        self._key_driver.draw()
+        self._value_driver.draw()
 
     def updated_artist(self, artist: str, **kwargs) -> None:
         self._db["Artist"] = artist

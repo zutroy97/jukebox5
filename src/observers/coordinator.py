@@ -1,5 +1,5 @@
 import logging
-import asyncio
+import threading
 
 from panel.panel_input_base import JukeboxPanelInputBase, JukeboxPanelOutputBase
 from .observer_base import ObserverBase, UpdateEventType
@@ -11,13 +11,17 @@ class Coordinator:
         #super().__init__()
         self._logger = logging.getLogger(__class__. __name__)
         self.observers : list[ObserverBase] = []
-        self._running : bool = True
+        self.IsRunning : bool = True
         self._timeout : float = -1.0
         self._panelButton : JukeboxPanelInputBase = kwargs['panelButtons']
         self._panelDisplay : JukeboxPanelOutputBase = kwargs['panelDisplay']
         self._updateCount : int = 0
         self._reset_timeout()
         self.updateJukeboxDisplay()
+
+        self._threadReadLoop = threading.Thread(target=self.loop)
+        self._threadReadLoop.daemon = True
+        self._threadReadLoop.start()        
 
     def add_observer(self, observer: ObserverBase):
         if observer not in self.observers:
@@ -33,21 +37,20 @@ class Coordinator:
             #print(f"Notifying observer {observer.__class__.__name__} of update type {update_type} with value: {value}")
             observer.UpdateReceived(update_type=update_type, value=value, **kwargs)
     
-    async def loop(self) -> None:
-        self._running = True
-        while self._running:
+    def loop(self) -> None:
+        while self.IsRunning:
             is_timeout = self._timeout > 0 and time.monotonic() >= self._timeout
             if is_timeout:
                 self.notify_observers(UpdateEventType.NO_EVENT_RECEIVED_TIMEOUT, '')
                 self._timeout = -1.0 # disable trigger
             for observer in self.observers:
-                await observer.draw()
-            await asyncio.sleep(0.001)
+                observer.draw()
+            time.sleep(0.033)
     
-    async def shutdown(self, message: str = "Shutting down coordinator"):
-        self._running = False
+    def shutdown(self, message: str = "Shutting down coordinator"):
+        self.IsRunning = False
         for observer in self.observers:
-            await observer.shutdown(message=message)
+            observer.shutdown(message=message)
 
     def update_song_info(self, artist: str, song_title: str):
         self.notify_observers(update_type=UpdateEventType.ARTIST, value=artist)

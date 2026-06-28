@@ -1,3 +1,5 @@
+import time
+
 import drivers as ldisp
 import asyncio
 import logging
@@ -15,30 +17,30 @@ led1 = ldisp.led16_display(addr=(0x72, 0x73, 0x74))
 def onPanelButtonPress(key : str):
     print(f"Button Pressed: {key}")
 
-async def exercise(coorinator: Coordinator):
-    sleep_s : int = 5
+def exercise(coorinator: Coordinator):
+    sleep_s : int = 10
     coorinator.update_song_info(artist="Chumbawamba", song_title="Tubthumping (I Get Knocked Down)")
-    await asyncio.sleep(sleep_s)   
+    time.sleep(sleep_s)   
     
     coorinator.update_song_info(artist="Conway Twitty", song_title="Hello Darlin'")
-    await asyncio.sleep(sleep_s)
+    time.sleep(sleep_s)
 
     coorinator.update_song_info(artist="Kiss", song_title="I Was Made For Lovin' You")
-    await asyncio.sleep(sleep_s)
+    time.sleep(sleep_s)
 
     coorinator.update_song_info(artist="Johnny Cash & June Carter", song_title="Jackson")
-    await asyncio.sleep(sleep_s)
+    time.sleep(sleep_s)
     coorinator.update_song_info(artist="John Williams", song_title="Jurassic Park Theme")
-    await asyncio.sleep(sleep_s)
+    time.sleep(sleep_s)
     coorinator.update_song_info(artist="Nirvana", song_title="Smells Like Teen Spirit")
-    await asyncio.sleep(sleep_s)
+    time.sleep(sleep_s)
     coorinator.update_song_info(artist="Weird Al Yankovic", song_title="Amish Paradise")
-    await asyncio.sleep(sleep_s)
+    time.sleep(sleep_s)
 
-    await coorinator.shutdown()
+    coorinator.shutdown()
 
 
-async def main():
+def main():
     panelSerial = Serial(port='/dev/cu.usbserial-3220', baudrate=115200, timeout=None)
     panel = JukeboxPanelArduinoSerial(port=panelSerial, onButtonPress=onPanelButtonPress)
     #asyncio.create_task(panelButton.loop())
@@ -63,13 +65,13 @@ async def main():
     kv_observer = KeyValueTextObserver(key_driver = led_artist_observer, value_driver=led_song_title_observer)
     coorinator.add_observer(kv_observer)
 
-    taskCoordinator = asyncio.create_task(coorinator.loop())
-    #taskPanel = asyncio.create_task(panelButton.loop())
-    taskExercise = asyncio.create_task(exercise(coorinator))
+    # taskCoordinator = asyncio.create_task(coorinator.loop())
+    # #taskPanel = asyncio.create_task(panelButton.loop())
+    # taskExercise = asyncio.create_task(exercise(coorinator))
 
-    await asyncio.gather(taskCoordinator, taskExercise, return_exceptions=True)
+    # await asyncio.gather(taskCoordinator, taskExercise, return_exceptions=True)
 
-
+    exercise(coorinator)
   
 
 if __name__ == '__main__':
@@ -83,7 +85,7 @@ if __name__ == '__main__':
     logger.addHandler(handler)
     logger.setLevel(logging.DEBUG)
 
-    asyncio.run(main())
+    main()
 
 # if __name__ == "__main__":
 #     import asyncio
@@ -100,7 +102,7 @@ if __name__ == '__main__':
 #             for i, seg in enumerate(segments):
 #                 print(f"Position {i}: {bin(seg)}")
 #                 led0._display.set_digit_raw(i, seg)  # Update the LED display with the current segments
-#             await asyncio.sleep(0.1)  # Add a small delay to control the animation speed
+#             time.sleep(0.1)  # Add a small delay to control the animation speed
     
 #     asyncio.run(main())    
 
@@ -119,6 +121,6 @@ if __name__ == '__main__':
 #             for i, seg in enumerate(segments):
 #                 print(f"Position {i}: {bin(seg)}")
 #                 led1._display.set_digit_raw(i, seg)  # Update the LED display with the current segments
-#             await asyncio.sleep(0.1)  # Add a small delay to control the animation speed
+#             time.sleep(0.1)  # Add a small delay to control the animation speed
     
 #     asyncio.run(main())    

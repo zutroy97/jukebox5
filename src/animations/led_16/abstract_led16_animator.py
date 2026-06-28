@@ -25,17 +25,17 @@ class AbstractLED16Animator(AbstractAnimator):
         return [AbstractLED16Animator.get_char_pattern(ch) for ch in s]    
         
     @abstractmethod
-    async def Next(self) -> bool:
+    def Next(self) -> bool:
         '''Returns true if more data is available'''
         return False
     
     @abstractmethod
-    async def Start(self) -> None:
+    def Start(self) -> None:
         '''Start/Restarts the animation'''
         pass
 
     @abstractmethod
-    async def GetSegments(self) -> list[int]:
+    def GetSegments(self) -> list[int]:
         '''Returns the segments to be displayed'''
         return []
     

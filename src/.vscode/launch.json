@@ -1,6 +1,7 @@
 {
     "version": "0.2.0",
     "configurations": [
+
         {
             "name": "Python: Debug main.py",
             "type": "python",
@@ -8,7 +9,10 @@
             "program": "${workspaceFolder}/main.py",
             "console": "integratedTerminal",
             "justMyCode": true,
-            "pythonPath": "${workspaceFolder}/../.venv/bin/python"
+            "pythonPath": "${workspaceFolder}/../.venv/bin/python",
+            "env": {
+                "BLINKA_FT232H": "1"
+            }
         },
         {
             "name": "Python: Debug display_sim.py",

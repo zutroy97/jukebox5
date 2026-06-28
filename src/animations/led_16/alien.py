@@ -7,7 +7,7 @@ class AlienAnimator(AbstractLED16Animator):
         super().__init__(**kwargs)
         self._segment_list :list[list[int]] = []
 
-    async def Start(self) -> None:
+    def Start(self) -> None:
         self._segment_list.clear()
         raw_segments : list[int] = self.string_to_char_mask(self.text)
 
@@ -29,10 +29,10 @@ class AlienAnimator(AbstractLED16Animator):
             
      
 
-    async def Next(self) -> bool:
+    def Next(self) -> bool:
         return len(self._segment_list) > 0
 
-    async def GetSegments(self) -> list[int]:
+    def GetSegments(self) -> list[int]:
         return self._segment_list.pop(0) if self._segment_list else [0] * len(self.text)
     
     def _make_shuffled_list(self) -> list[int]:

@@ -35,10 +35,10 @@ class led16_display(abstract_line_display.AbstractSingleLineDisplay):
         self._display.fill(0)
         self._position = 0
 
-    async def clear(self):
+    def clear(self):
         self._clear_line()
 
-    async def write(self, text: str):
+    def write(self, text: str):
         for char in text:
             if self._position > self.Width:
                 break # Can't display anyhow
@@ -50,6 +50,6 @@ class led16_display(abstract_line_display.AbstractSingleLineDisplay):
         #self._logger.debug(f'last position = {self._position}')
         self._display.show()
 
-    async def set_position(self, position: int):
+    def set_position(self, position: int):
         '''Set the cursor position on the display.'''
         self._position = position    
