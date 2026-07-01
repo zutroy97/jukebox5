@@ -133,6 +133,7 @@ class SingleLineAnimatedObserverBase(ObserverBase):
             chars = self._diff.getDiff(text)
             for pos, c in chars:
                 self.on_character_write(pos, c)
+            self._state = ObserverStates.ANIMATION_DELAY
             self.addTimer(ObserverStates.ANIMATION_DELAY,
                           ObserverStates.ANIMATING,
                           self.delay_between_characters_s)

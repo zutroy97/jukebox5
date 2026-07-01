@@ -67,6 +67,8 @@ def main():
     )
     source.start()
 
+    #coorinator.add_message("Weather", "Sunny 72°F", ttl_s=300, display_s=5)
+
     try:
         threading.Event().wait()
     except KeyboardInterrupt:

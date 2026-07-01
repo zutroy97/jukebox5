@@ -27,6 +27,6 @@ class led16_driver:
     
     @property
     def Width(self):
-        return self._display.i2c_device * 4
+        return len(self._display.i2c_device) * 4
     
 

@@ -24,6 +24,12 @@ class JukeboxPanelOutputBase(ABC):
     def WriteToThreeDigitDisplay(self, message: str): pass
 
     @abstractmethod
+    def WriteNumberToThreeDigitDisplay(self, num: int): pass    
+
+    @abstractmethod
+    def WriteNumberToFourDigitDisplay(self, num: int): pass    
+
+    @abstractmethod
     def ClearThreeDigitDisplay(self): pass
 
     @abstractmethod

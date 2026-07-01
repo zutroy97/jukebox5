@@ -25,8 +25,11 @@ class pd1200LineDisplay(abstract_line_display.AbstractSingleLineDisplay):
             if self._position >= self.Width:
                 #self._logger.debug('Already exceeds max width')
                 return
+            remaining = self.Width - self._position
+            if len(text) > remaining:
+                text = text[:remaining]
             self._driver.set_position(self._position, self._line)
-            
+
             self._driver.write_bytes(text.encode('ascii', errors='ignore'))
             self._position += len(text)
             #self._logger.debug(f'last position = {self._position}')

@@ -8,8 +8,13 @@ import paho.mqtt.client as mqtt
 
 class ShairportSyncMQTTSource:
     """Subscribes to shairport-sync MQTT metadata and calls:
-        on_song_changed(artist, title)  — when a new track starts
-        on_play_end()                   — when shairport-sync/play_end is received
+        on_song_changed(artist, title, album)  — when a new track starts
+        on_play_end()                          — when shairport-sync/play_end is received
+
+    Artist and title are the priority fields. on_song_changed fires as soon as
+    both are known. Album is included if it has already arrived; if it arrives
+    later it is ignored (the song is already displaying). track_id is used to
+    detect track changes and flush stale metadata.
 
     Compatible with paho-mqtt 1.x and 2.x.
     """
@@ -18,9 +23,9 @@ class ShairportSyncMQTTSource:
 
     def __init__(
         self,
-        on_song_changed: Callable[[str, str], None],
+        on_song_changed: Callable[[str, str, str], None],
         on_play_end: Callable[[], None],
-        broker_host: str = "jukebox4",
+        broker_host: str = "localhost",
         broker_port: int = 1883,
         base_topic: str = "shairport-sync",
         client_id: str = "jukebox",
@@ -31,13 +36,19 @@ class ShairportSyncMQTTSource:
         self._broker_host = broker_host
         self._broker_port = broker_port
         self._base_topic = base_topic.rstrip("/")
+
         self._artist: Optional[str] = None
         self._title: Optional[str] = None
+        self._album: Optional[str] = None
+        self._track_id: Optional[str] = None
+        self._fired: bool = False   # True once on_song_changed has fired for current track
         self._lock = threading.Lock()
         self._running = False
 
         self._topic_artist   = f"{self._base_topic}/artist"
         self._topic_title    = f"{self._base_topic}/title"
+        self._topic_album    = f"{self._base_topic}/album"
+        self._topic_track_id = f"{self._base_topic}/track_id"
         self._topic_play_end = f"{self._base_topic}/play_end"
 
         try:
@@ -88,11 +99,30 @@ class ShairportSyncMQTTSource:
         client.subscribe([
             (self._topic_artist,   0),
             (self._topic_title,    0),
+            (self._topic_album,    0),
+            (self._topic_track_id, 0),
             (self._topic_play_end, 0),
         ])
 
     def _on_disconnect(self, client, userdata, rc):
         self._logger.warning("MQTT disconnected rc=%d", rc)
+
+    def _try_fire(self, artist: Optional[str], title: Optional[str], album: Optional[str]) -> bool:
+        """Fire on_song_changed if artist and title are both present.
+        Must be called WITHOUT self._lock held (callback may take time).
+        Returns True if fired."""
+        if artist and title:
+            self._logger.info("Song changed: %r — %r (%r)", artist, title, album or "")
+            self._on_song_changed(artist, title, album or "")
+            return True
+        return False
+
+    def _reset_track(self) -> None:
+        """Flush all metadata for the current track. Call with self._lock held."""
+        self._artist   = None
+        self._title    = None
+        self._album    = None
+        self._fired    = False
 
     def _on_message(self, client, userdata, msg):
         try:
@@ -103,24 +133,50 @@ class ShairportSyncMQTTSource:
 
         self._logger.info("MQTT %-40s %r", msg.topic, value)
 
-        # TODO: Add handler for shairport-sync/track_id and shairport-sync/album
         if msg.topic == self._topic_play_end:
             self._logger.info("Play ended — clearing display")
             with self._lock:
-                self._artist = None
-                self._title  = None
+                self._reset_track()
+                self._track_id = None
             self._on_play_end()
             return
 
+        fire_artist = fire_title = fire_album = None
+
         with self._lock:
-            if msg.topic == self._topic_artist:
+            if msg.topic == self._topic_track_id:
+                if value != self._track_id:
+                    self._logger.debug(
+                        "New track_id %r (was %r) — resetting metadata",
+                        value, self._track_id,
+                    )
+                    self._reset_track()
+                    self._track_id = value
+                return  # track_id alone never triggers a display update
+
+            elif msg.topic == self._topic_artist:
+                if self._fired:
+                    # No track_id reset happened for this track (either the
+                    # broker doesn't publish track_id, or it arrived after
+                    # this artist message). A fresh artist message after
+                    # we've already fired means a new track is starting.
+                    self._reset_track()
                 self._artist = value
-                self._title  = None  # reset: new track arriving
+
             elif msg.topic == self._topic_title:
                 self._title = value
-            artist = self._artist
-            title  = self._title
 
-        if artist and title:
-            self._logger.info("Song changed: %r — %r", artist, title)
-            self._on_song_changed(artist, title)
+            elif msg.topic == self._topic_album:
+                self._album = value
+                # Album alone never triggers — artist+title must arrive first.
+                return
+
+            # Fire as soon as artist AND title are known, but only once per track.
+            if not self._fired and self._artist and self._title:
+                self._fired = True
+                fire_artist = self._artist
+                fire_title  = self._title
+                fire_album  = self._album  # may be None if album hasn't arrived yet
+
+        if fire_artist:
+            self._try_fire(fire_artist, fire_title, fire_album)
