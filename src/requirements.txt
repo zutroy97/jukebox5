@@ -10,6 +10,7 @@ binho-host-adapter==0.1.6
 fair_async_rlock==1.0.7
 future==1.0.0
 iso8601==2.1.0
+paho-mqtt==2.1.0
 pyftdi==0.57.1
 pyserial==3.5
 pyusb==1.3.1

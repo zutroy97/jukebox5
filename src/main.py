@@ -1,7 +1,7 @@
 import time
 
 import drivers as ldisp
-import asyncio
+import threading
 import logging
 from animations import RandomTypeWriter, Slide
 from observers import UpdateEventType, Coordinator,  SingleTextLineAnimatedObserver,KeyValueTextObserver, SingleLineLed16AnimatedObserver
@@ -9,6 +9,7 @@ from animations.abstract_clear_animator import AbstractClearTextAnimator, ClearT
 
 from serial import Serial
 from panel.panel_input_base import JukeboxPanelArduinoSerial, JukeboxPanelOutputBase
+from shairport_mqtt import ShairportSyncMQTTSource
 
 
 led0 = ldisp.led16_display(addr=(0x70, 0x71))
@@ -18,7 +19,7 @@ def onPanelButtonPress(key : str):
     print(f"Button Pressed: {key}")
 
 def exercise(coorinator: Coordinator):
-    sleep_s : int = 10
+    sleep_s : int = 20
     coorinator.update_song_info(artist="Chumbawamba", song_title="Tubthumping (I Get Knocked Down)")
     time.sleep(sleep_s)   
     
@@ -46,18 +47,10 @@ def main():
     #asyncio.create_task(panelButton.loop())
     coorinator = Coordinator(panelButtons= panel, panelDisplay=panel)
 
-
-    #led_artist_observer = SingleLineLed16AnimatedObserver(driver=led0.Seg14x4, event_type=UpdateEventType.ARTIST)
     led_artist_observer = SingleTextLineAnimatedObserver(driver=led0, event_type=UpdateEventType.ARTIST)
-    led_artist_observer.delay_between_characters_s = 0.01
     led_artist_observer.delay_after_animation_finished_s = 2
-    #led_artist_observer.changeAnimation(RandomTypeWriter())
-    # led_artist_observer.ClearDisplayAnimation = ClearTextBlankLeftToRightAnimator()    
-    #coorinator.add_observer(led_artist_observer)
-    
+ 
     led_song_title_observer = SingleTextLineAnimatedObserver(driver=led1, event_type=UpdateEventType.SONG_TITLE)    
-    # led_song_title_observer = SingleLineLed16AnimatedObserver(driver=led1.Seg14x4, event_type=UpdateEventType.SONG_TITLE)
-    led_song_title_observer.delay_between_characters_s = 0.01
     led_song_title_observer.delay_after_animation_finished_s = 2
     led_song_title_observer.changeAnimation(RandomTypeWriter())
     led_song_title_observer.ClearDisplayAnimation = ClearTextBlankLeftToRightAnimator()
@@ -65,13 +58,20 @@ def main():
     kv_observer = KeyValueTextObserver(key_driver = led_artist_observer, value_driver=led_song_title_observer)
     coorinator.add_observer(kv_observer)
 
-    # taskCoordinator = asyncio.create_task(coorinator.loop())
-    # #taskPanel = asyncio.create_task(panelButton.loop())
-    # taskExercise = asyncio.create_task(exercise(coorinator))
+    #exercise(coorinator)
+    source = ShairportSyncMQTTSource(
+        on_song_changed=coorinator.update_song_info,
+        on_play_end=coorinator.play_ended,
+        broker_host="jukebox4",   # or your broker's IP
+        base_topic="shairport-sync",
+    )
+    source.start()
 
-    # await asyncio.gather(taskCoordinator, taskExercise, return_exceptions=True)
-
-    exercise(coorinator)
+    try:
+        threading.Event().wait()
+    except KeyboardInterrupt:
+        source.stop()
+        coorinator.shutdown()
   
 
 if __name__ == '__main__':

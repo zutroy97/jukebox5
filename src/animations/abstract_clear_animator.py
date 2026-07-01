@@ -39,7 +39,7 @@ class ClearTextBlankLeftToRightAnimator(AbstractClearTextAnimator):
         super().__init__()
         self._animation_clear_segment : int = 0
         self._next_animation_tick : float = 0.0
-        self.delay_between_characters_s : float = 0.010
+        self.delay_between_characters_s : float = 0.033
 
     def Handle(self, textAnimator: "SingleTextLineAnimatedObserver") -> None:
         super().Handle(textAnimator)
