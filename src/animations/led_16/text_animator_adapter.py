@@ -7,12 +7,12 @@ class LED16TextAnimatorAdapter(AbstractLED16Animator):
         super().__init__(**kwargs)
         self._text_animator = text_animator
 
-    async def Start(self) -> None:
-        await self._text_animator.Start()
+    def Start(self) -> None:
+        self._text_animator.Start()
 
-    async def Next(self) -> bool:
-        return await self._text_animator.Next()
+    def Next(self) -> bool:
+        return self._text_animator.Next()
 
-    async def GetSegments(self) -> list[int]:
-        text = await self._text_animator.GetText()
+    def GetSegments(self) -> list[int]:
+        text = self._text_animator.GetText()
         return self.string_to_char_mask(text)

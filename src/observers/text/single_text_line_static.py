@@ -26,10 +26,10 @@ class SingleTextLineStaticObserver(ObserverBase):
             self._text = value
             self._textUpdateNeeded = True
 
-    async def draw(self) -> None:
+    def draw(self) -> None:
         '''Called to start the observer's main loop'''
         if self._textUpdateNeeded and self._driver is not None:
-            await self._driver.clear()
-            await self._driver.write(self._text)
+            self._driver.clear()
+            self._driver.write(self._text)
             self._textUpdateNeeded = False
 

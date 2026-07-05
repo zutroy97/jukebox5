@@ -17,5 +17,5 @@ class TerminalObserver(ObserverBase):
     def updated_shutdown(self, message: str, **kwargs) -> None:
         print(f"{strftime('%H:%M:%S', gmtime())} Shutdown message received: {message}")
 
-    async def draw(self) -> None:
+    def draw(self) -> None:
         pass

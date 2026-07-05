@@ -6,16 +6,16 @@ class LED16Static(AbstractLED16Animator):
         super().__init__(**kwargs)
         self._read : bool = False
 
-    async def Start(self) -> None:
+    def Start(self) -> None:
         self._read = False
 
-    async def Next(self) -> bool:
+    def Next(self) -> bool:
         if not self._read:
             self._read = True
             return True
         return False
 
-    async def GetSegments(self) -> list[int]:
+    def GetSegments(self) -> list[int]:
         return self.string_to_char_mask(self.text[:self.max_text_width])
     
 

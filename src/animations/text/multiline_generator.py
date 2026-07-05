@@ -1,38 +1,49 @@
 import textwrap
-import asyncio
 
 from .abstract_text_animator import AbstractTextAnimator
 
+
 class MultiLineGenerator(AbstractTextAnimator):
-    '''Animates text by splitting it into multiple lines and displaying each line one at a time.'''
+    """Splits text into display-width chunks and yields them one at a time.
+
+    API:
+        Start()    — (re)initialise from self.text
+        Next()     — advance to the next line; returns True if one is available
+        GetText()  — return the current line (idempotent between Next() calls)
+        has_more() — True if at least one further line exists beyond the current one
+                     (does NOT advance the iterator)
+
+    Bug fixed vs original: the old GetText() did pop(0) while Next() only checked
+    len > 0, so Next() after the last GetText() still returned True and the state
+    machine attempted one extra iteration.  Now Next() is the only place that
+    advances the iterator and GetText() is side-effect free.
+    """
+
     def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
-        self._lines : list[str] = []
+        self._lines: list[str] = []
+        self._current: str = ""
 
-    async def Start(self) -> None:
-        self._lines = textwrap.wrap(self.text, width=self.max_text_width, expand_tabs=False, drop_whitespace=True)
-        self._done = False
+    def Start(self) -> None:
+        self._lines = textwrap.wrap(
+            self.text,
+            width=self.max_text_width,
+            expand_tabs=False,
+            drop_whitespace=True,
+        )
+        self._current = ""
 
-    async def Next(self) -> bool:
-        '''Returns true if more data is available'''
+    def Next(self) -> bool:
+        """Advance to the next line. Returns True if a line is now available."""
+        if not self._lines:
+            return False
+        self._current = self._lines.pop(0)
+        return True
+
+    def GetText(self) -> str:
+        """Return the line made current by the most recent Next() call."""
+        return self._current
+
+    def has_more(self) -> bool:
+        """True if there are lines remaining beyond the current one."""
         return len(self._lines) > 0
-
-    async def GetText(self) -> str:
-        '''Returns the text to be displayed'''
-        return self._lines.pop(0)
-
-async def main():
-    anim = MultiLineGenerator(text="Hello there! My name is Slim Shady. This is a test of the multiline slide animation. It should display the text one line at a time."
-        , max_text_width=20)
-    cnt = 0
-    while cnt < 10:
-        await anim.Start()
-        while await anim.Next():
-            text = await anim.GetText()
-            print(text)
-            print('-' * anim.max_text_width)
-            await asyncio.sleep(0.250)
-        cnt += 1
-
-if __name__ == "__main__":
-    asyncio.run(main())   
