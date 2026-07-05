@@ -1,8 +1,8 @@
 import time
 from typing import Optional
 
-from observers.observer_states import ObserverStates
-from observers.single_line_animated_simple_base import SingleLineAnimatedObserverBase, _TRULY_IDLE_STATES
+from observer_states import ObserverStates
+from observers.single_line_animated_simple_base import SingleLineAnimatedObserverBase
 from drivers.abstract_line_display import AbstractSingleLineDisplay
 from animations.abstract_clear_animator import AbstractClearTextAnimator, ClearTextImmediatelyAnimator
 

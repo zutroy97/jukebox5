@@ -2,6 +2,13 @@ from enum import Enum
 
 
 class ObserverStates(Enum):
+    """Shared by both the `observers` and `animations` packages (clear
+    animators need to read/set an observer's `_state`). Deliberately kept as
+    a standalone top-level module with zero dependencies: putting it inside
+    the `observers` package created a circular import — any module in
+    `animations` that needed it would trigger `observers/__init__.py`,
+    which imports observer modules that import back into `animations`."""
+
     IDLE = 0
     ANIMATING = 1
     TEXT_UPDATED = 2

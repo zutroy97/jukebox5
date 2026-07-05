@@ -1,5 +1,4 @@
 import random
-import asyncio
 from .abstract_text_animator import AbstractTextAnimator
 
 class RandomTypeWriter(AbstractTextAnimator):

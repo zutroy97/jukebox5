@@ -1,13 +1,13 @@
-from abc import abstractmethod
 import time
+from abc import abstractmethod
 from typing import Optional
 
 from animations import AbstractTextAnimator, MultiLineGenerator, Slide, TextDiff
-from observers.observer_states import ObserverStates
+from observer_states import ObserverStates
 
 from .observer_base import UpdateEventType, ObserverBase
 
-_TRULY_IDLE_STATES = frozenset([
+_IDLE_STATES = frozenset([
     ObserverStates.IDLE,
     ObserverStates.ANIMATION_FINISHED,
 ])
@@ -19,18 +19,50 @@ _TIMER_DRIVEN_STATES = frozenset([
 ])
 
 
+class _DelayTimer:
+    """A one-shot 'wait delay_s, then move from_state -> to_state' timer.
+    Keyed by from_state in SingleLineAnimatedObserverBase._timers, so at most
+    one of these is ever pending at a time."""
+
+    def __init__(self, from_state: ObserverStates, to_state: ObserverStates, delay_s: float) -> None:
+        self.from_state = from_state
+        self.to_state = to_state
+        self.deadline = time.monotonic() + delay_s
+
+    def has_elapsed(self) -> bool:
+        return time.monotonic() >= self.deadline
+
+    def seconds_remaining(self) -> float:
+        return max(0.0, self.deadline - time.monotonic())
+
+
 class SingleLineAnimatedObserverBase(ObserverBase):
-    class AnimationDelayTimer:
-        def __init__(self, from_state: ObserverStates, to_state: ObserverStates, delay_s: float):
-            self.from_state = from_state
-            self.to_state = to_state
-            self.deadline = time.monotonic() + delay_s
+    """Drives a small state machine that types a line of text onto a display
+    one character/frame at a time, waits, then moves on.
 
-        def has_elapsed(self) -> bool:
-            return time.monotonic() >= self.deadline
+    Subclasses (SingleTextLineAnimatedObserver, SingleLineLed16AnimatedObserver)
+    only need to implement `on_character_write` and `clear_display` — the
+    line-wrapping, pacing, and looping logic live entirely here.
 
-        def seconds_remaining(self) -> float:
-            return max(0.0, self.deadline - time.monotonic())
+    States fall into three buckets:
+      - idle (_IDLE_STATES): nothing to do, next_wakeup() returns None.
+      - timer-driven (_TIMER_DRIVEN_STATES): waiting on a `_DelayTimer`.
+      - everything else ("advancing"): processed immediately by draw(), which
+        keeps calling the matching on_state_* handler until the state lands
+        in one of the two buckets above (see `_advance_through_states`).
+    """
+
+    # Maps a state to the name of the handler that processes it. Every state
+    # not in _IDLE_STATES or _TIMER_DRIVEN_STATES must be listed here.
+    _STATE_HANDLERS: dict[ObserverStates, str] = {
+        ObserverStates.TEXT_UPDATED: 'on_state_text_updated',
+        ObserverStates.START_ANIMATION: 'on_state_start_animation',
+        ObserverStates.ANIMATING: 'on_state_animating',
+        ObserverStates.ANIMATION_LINE_FINISHED: 'on_state_animation_line_finished',
+        ObserverStates.ANIMATION_FINISHED: 'on_state_animation_finished',
+        ObserverStates.ANIMATION_LINE_FINISHED_DELAY_COMPLETE: 'on_state_animation_line_finished_delay_complete',
+        ObserverStates.ANIMATION_FINISHED_DELAY_COMPLETE: 'on_state_animation_finished_delay_complete',
+    }
 
     def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
@@ -42,7 +74,9 @@ class SingleLineAnimatedObserverBase(ObserverBase):
         self._text: str = ""
         self._state: ObserverStates = ObserverStates.IDLE
         self._line_animation: AbstractTextAnimator = Slide()
-        self._timers: dict[ObserverStates, SingleLineAnimatedObserverBase.AnimationDelayTimer] = {}
+        self._text_generator: MultiLineGenerator = MultiLineGenerator(text="", max_text_width=self.DisplayWidth)
+        self._diff: TextDiff = TextDiff()
+        self._timers: dict[ObserverStates, _DelayTimer] = {}
         self.auto_loop: bool = True
 
         self.delay_between_characters_s: float = 0.02
@@ -54,13 +88,12 @@ class SingleLineAnimatedObserverBase(ObserverBase):
     # ------------------------------------------------------------------
 
     def next_wakeup(self) -> Optional[float]:
-        if self._state in _TRULY_IDLE_STATES:
+        if self._state in _IDLE_STATES:
             return None
         if self._state in _TIMER_DRIVEN_STATES:
-            for timer in self._timers.values():
-                if timer.from_state == self._state:
-                    return timer.seconds_remaining()
-            return 0.0
+            timer = self._timers.get(self._state)
+            return timer.seconds_remaining() if timer is not None else 0.0
+        # Any other state is advanced immediately by draw() — wake now.
         return 0.0
 
     # ------------------------------------------------------------------
@@ -84,25 +117,28 @@ class SingleLineAnimatedObserverBase(ObserverBase):
             self._text = text
             self._state = ObserverStates.TEXT_UPDATED
 
-    def addTimer(self, from_state: ObserverStates, to_state: ObserverStates, delay_s: float):
-        self._timers[from_state] = SingleLineAnimatedObserverBase.AnimationDelayTimer(
-            from_state, to_state, delay_s
-        )
+    def addTimer(self, from_state: ObserverStates, to_state: ObserverStates, delay_s: float) -> None:
+        self._timers[from_state] = _DelayTimer(from_state, to_state, delay_s)
 
-    def _checkTimers(self):
-        for key in list(self._timers.keys()):
-            timer = self._timers[key]
-            if timer.has_elapsed():
-                if self._state == timer.from_state:
-                    self._state = timer.to_state
-                del self._timers[key]
+    def _checkTimers(self) -> None:
+        for from_state, timer in list(self._timers.items()):
+            if not timer.has_elapsed():
+                continue
+            del self._timers[from_state]
+            if self._state == from_state:
+                self._state = timer.to_state
 
     def UpdateReceived(self, update_type: UpdateEventType, **kwargs) -> None:
+        # Intentionally does not call super().UpdateReceived(): this is a
+        # single-purpose leaf display (one artist/title/etc. field) that
+        # only ever reacts to its own configured event type. It doesn't
+        # participate in message-rotation — KeyValueTextObserver owns that
+        # at the composite level.
         if self._event_type is None or update_type != self._event_type:
             return
         self.Value = kwargs.get('value', self._text)
 
-    def changeAnimation(self, anim_type: AbstractTextAnimator):
+    def changeAnimation(self, anim_type: AbstractTextAnimator) -> None:
         self._line_animation = anim_type
         if self._state is not ObserverStates.IDLE:
             self._state = ObserverStates.TEXT_UPDATED
@@ -128,23 +164,13 @@ class SingleLineAnimatedObserverBase(ObserverBase):
         pass
 
     def on_state_animating(self) -> None:
-        if self._line_animation.Next():
-            text = self._line_animation.GetText()
-            chars = self._diff.getDiff(text)
-            for pos, c in chars:
-                self.on_character_write(pos, c)
-            self._state = ObserverStates.ANIMATION_DELAY
-            self.addTimer(ObserverStates.ANIMATION_DELAY,
-                          ObserverStates.ANIMATING,
-                          self.delay_between_characters_s)
-        else:
-            # Character animation for this line is done.
-            # has_more() tells us if the generator has further lines without
-            # consuming them — the next _createAnimation() call will fetch them.
-            if self._text_generator.has_more():
-                self._state = ObserverStates.ANIMATION_LINE_FINISHED
-            else:
-                self._state = ObserverStates.ANIMATION_FINISHED
+        if not self._line_animation.Next():
+            self._advance_past_current_line()
+            return
+        text = self._line_animation.GetText()
+        for pos, c in self._diff.getDiff(text):
+            self.on_character_write(pos, c)
+        self._schedule_character_delay()
 
     def on_state_animation_line_finished(self) -> None:
         self.addTimer(ObserverStates.ANIMATION_LINE_FINISHED_DELAY,
@@ -178,40 +204,69 @@ class SingleLineAnimatedObserverBase(ObserverBase):
         pass
 
     # ------------------------------------------------------------------
+    # Shared by subclasses that render one "frame" per delay_between_characters_s
+    # tick (SingleTextLineAnimatedObserver writes one diffed character at a
+    # time; SingleLineLed16AnimatedObserver writes one buffered segment frame
+    # at a time). Centralizing this trio means the from_state/to_state/
+    # self._state can't drift out of sync — a bug here previously left
+    # self._state stuck at ANIMATING forever, which made next_wakeup() return
+    # 0.0 on every tick and busy-looped the coordinator thread.
+    # ------------------------------------------------------------------
+
+    def _schedule_character_delay(self) -> None:
+        """Pause in ANIMATING for delay_between_characters_s before resuming."""
+        self._state = ObserverStates.ANIMATION_DELAY
+        self.addTimer(ObserverStates.ANIMATION_DELAY,
+                      ObserverStates.ANIMATING,
+                      self.delay_between_characters_s)
+
+    def _advance_past_current_line(self) -> None:
+        """Called once the current line has no more character/frame data.
+        has_more() tells us if the generator has further lines without
+        consuming them — the next _createAnimation() call (via
+        START_ANIMATION) fetches the next one."""
+        if self._text_generator.has_more():
+            self._state = ObserverStates.ANIMATION_LINE_FINISHED
+        else:
+            self._state = ObserverStates.ANIMATION_FINISHED
+
+    # ------------------------------------------------------------------
     # Draw loop
     # ------------------------------------------------------------------
 
     def draw(self) -> None:
-        if self._state in _TRULY_IDLE_STATES:
+        if self._state in _IDLE_STATES:
             return
 
         timer_still_pending = False
         if self._state in _TIMER_DRIVEN_STATES:
             self._checkTimers()
-            if self._state in _TIMER_DRIVEN_STATES:
-                timer_still_pending = True
+            timer_still_pending = self._state in _TIMER_DRIVEN_STATES
 
         if not timer_still_pending:
             self.on_pre_draw()
-
-            if self._state is ObserverStates.TEXT_UPDATED:
-                self.on_state_text_updated()
-            if self._state is ObserverStates.START_ANIMATION:
-                self.on_state_start_animation()
-            if self._state is ObserverStates.ANIMATING:
-                self.on_state_animating()
-            if self._state is ObserverStates.ANIMATION_LINE_FINISHED:
-                self.on_state_animation_line_finished()
-            if self._state is ObserverStates.ANIMATION_FINISHED:
-                self.on_state_animation_finished()
-            if self._state is ObserverStates.ANIMATION_LINE_FINISHED_DELAY_COMPLETE:
-                self.on_state_animation_line_finished_delay_complete()
-            if self._state is ObserverStates.ANIMATION_FINISHED_DELAY_COMPLETE:
-                self.on_state_animation_finished_delay_complete()
+            self._advance_through_states()
 
         # Always run on_post_draw — subclass clear animator lives here.
         self.on_post_draw()
         self._checkTimers()
+
+    def _advance_through_states(self) -> None:
+        """Repeatedly dispatch to the handler for the current state until it
+        lands on an idle or timer-driven state. Each handler is expected to
+        change self._state; if one doesn't, we stop and log a warning
+        instead of spinning on the same state forever."""
+        while self._state in self._STATE_HANDLERS:
+            state_before = self._state
+            handler = getattr(self, self._STATE_HANDLERS[state_before])
+            handler()
+            if self._state == state_before:
+                self._logger.warning(
+                    "%s: on_state handler for %s did not change the state — "
+                    "stopping here instead of spinning",
+                    self.__class__.__name__, state_before,
+                )
+                break
 
     # ------------------------------------------------------------------
     # Helpers

@@ -1,5 +1,5 @@
 from .abstract_text_animator import AbstractTextAnimator
-import asyncio
+
 
 class Slide(AbstractTextAnimator):
     def __init__(self, **kwargs) -> None:

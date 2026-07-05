@@ -1,10 +1,11 @@
 from abc import abstractmethod, ABC
 import logging
-# Avoid importing observers at module import time to prevent circular imports.
-from typing import TYPE_CHECKING
 import time
+# Only import the observers package under TYPE_CHECKING — it isn't needed at
+# runtime here (see observer_states.py for why this package boundary matters).
+from typing import TYPE_CHECKING
 
-from observers.observer_states import ObserverStates
+from observer_states import ObserverStates
 
 if TYPE_CHECKING:
     from observers.text.single_text_line_animated import SingleTextLineAnimatedObserver
