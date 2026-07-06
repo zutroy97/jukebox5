@@ -2,10 +2,65 @@ import logging
 import queue
 import threading
 import time
-from typing import Callable
+from typing import Callable, Optional
 
 from panel.panel_input_base import JukeboxPanelInputBase, JukeboxPanelOutputBase
 from .observer_base import ObserverBase, UpdateEventType
+
+
+class _TrackSelector:
+    """Accumulates digits typed on the panel into a 3-digit track selection.
+
+    Only ever touched from the Coordinator's own thread (via `_enqueue` and
+    the `_loop` polling below), so it needs no locking of its own.
+    """
+
+    DIGIT_COUNT: int = 3
+    SELECTION_TIMEOUT_S: float = 10.0
+
+    def __init__(self, panel_display: JukeboxPanelOutputBase, on_selection_complete: Callable[[str], None]) -> None:
+        self._panel_display = panel_display
+        self._on_selection_complete = on_selection_complete
+        self._digits: str = ""
+        self._deadline: Optional[float] = None
+
+    def is_active(self) -> bool:
+        return self._deadline is not None
+
+    def button_pressed(self, key: str) -> None:
+        if key == 'R':
+            self._reset()
+            return
+        if key not in "0123456789":
+            return
+
+        if not self._digits:
+            self._panel_display.RightLedSet(True)
+        self._digits += key
+        self._deadline = time.monotonic() + self.SELECTION_TIMEOUT_S
+        self._panel_display.WriteToFourDigitDisplay(self._digits.ljust(4))
+
+        if len(self._digits) < self.DIGIT_COUNT:
+            return
+
+        entered = self._digits
+        self._reset()
+        self._on_selection_complete(entered)
+
+    def next_wakeup(self) -> Optional[float]:
+        if self._deadline is None:
+            return None
+        return max(0.0, self._deadline - time.monotonic())
+
+    def check_timeout(self) -> None:
+        if self._deadline is not None and time.monotonic() >= self._deadline:
+            self._reset()
+
+    def _reset(self) -> None:
+        self._digits = ""
+        self._deadline = None
+        self._panel_display.RightLedSet(False)
+        self._panel_display.WriteToFourDigitDisplay(' ' * 4)
 
 
 class Coordinator:
@@ -29,6 +84,9 @@ class Coordinator:
         self._panelButton: JukeboxPanelInputBase = kwargs['panelButtons']
         self._panelDisplay: JukeboxPanelOutputBase = kwargs['panelDisplay']
         self._updateCount: int = 0
+
+        on_selection_complete = kwargs.get('on_selection_complete', lambda entered: None)
+        self._track_selector = _TrackSelector(panel_display=self._panelDisplay, on_selection_complete=on_selection_complete)
 
         self._event_queue: "queue.Queue[Callable[[], None]]" = queue.Queue()
 
@@ -100,6 +158,10 @@ class Coordinator:
         """Write a value to the four-digit panel display."""
         self._enqueue(lambda: self._panelDisplay.WriteToFourDigitDisplay(text))
 
+    def on_button_press(self, key: str) -> None:
+        """Feed a raw panel button press ('0'-'9', 'R', 'P') into track selection."""
+        self._enqueue(lambda: self._track_selector.button_pressed(key))
+
     def shutdown(self, message: str = "Shutting down coordinator") -> None:
         """Shut down the coordinator loop cleanly and wait for it to exit."""
         self._enqueue(lambda: self._apply_shutdown(message))
@@ -148,6 +210,10 @@ class Coordinator:
         if remaining_timeout > 0:
             deadlines.append(remaining_timeout)
 
+        selection_wakeup = self._track_selector.next_wakeup()
+        if selection_wakeup is not None:
+            deadlines.append(selection_wakeup)
+
         for observer in self._snapshot_observers():
             w = observer.next_wakeup()
             if w is not None:
@@ -173,11 +239,14 @@ class Coordinator:
                 self._notify_all(UpdateEventType.NO_EVENT_RECEIVED_TIMEOUT, '')
                 self._timeout = time.monotonic() + Coordinator.TimeoutLimitInSeconds
 
+            self._track_selector.check_timeout()
+
             for observer in self._snapshot_observers():
                 observer.draw()
 
     def updateJukeboxDisplay(self) -> None:
         x = self._updateCount % 2
         self._panelDisplay.LeftLedSet(x == 1)
-        self._panelDisplay.RightLedSet(x == 0)
+        if not self._track_selector.is_active():
+            self._panelDisplay.RightLedSet(x == 0)
         self._panelDisplay.WriteToThreeDigitDisplay(str(self._updateCount))

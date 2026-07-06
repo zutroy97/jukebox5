@@ -53,6 +53,7 @@ class ShairportSyncMQTTSource:
         self._topic_album    = f"{self._base_topic}/album"
         self._topic_track_id = f"{self._base_topic}/track_id"
         self._topic_play_end = f"{self._base_topic}/play_end"
+        self._topic_remote   = f"{self._base_topic}/remote"
 
         try:
             self._client = mqtt.Client(
@@ -70,6 +71,15 @@ class ShairportSyncMQTTSource:
         self._running = True
         t = threading.Thread(target=self._connect_loop, daemon=True)
         t.start()
+
+    def queue_next(self, track_id: str) -> None:
+        """Ask shairport-sync to queue a track next by publishing to <base_topic>/remote."""
+        payload = f"queue_next {track_id}"
+        result = self._client.publish(self._topic_remote, payload)
+        if result.rc != mqtt.MQTT_ERR_SUCCESS:
+            self._logger.warning("Failed to publish %r to %s (rc=%d)", payload, self._topic_remote, result.rc)
+        else:
+            self._logger.info("Published %r to %s", payload, self._topic_remote)
 
     def stop(self) -> None:
         self._running = False
