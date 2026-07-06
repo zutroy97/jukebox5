@@ -7,6 +7,7 @@ from animations import RandomTypeWriter
 from animations.abstract_clear_animator import ClearTextBlankLeftToRightAnimator
 from observers import UpdateEventType, Coordinator, SingleTextLineAnimatedObserver, KeyValueTextObserver
 from panel.panel_input_base import JukeboxPanelArduinoSerial
+from playlist import Playlist
 from shairport_mqtt import ShairportSyncMQTTSource
 
 from serial import Serial
@@ -51,6 +52,13 @@ def main():
     panel = JukeboxPanelArduinoSerial(port=panelSerial, onButtonPress=onPanelButtonPress)
     coordinator = Coordinator(panelButtons=panel, panelDisplay=panel)
 
+    try:
+        playlist = Playlist()
+    except Exception as e:
+        logger.error(f"Failed to load playlist: {e}")
+        coordinator.add_message("Error", "Playlist load failed", ttl_s=0, display_s=5)
+        playlist = None
+
     led_artist_observer = SingleTextLineAnimatedObserver(driver=led0, event_type=UpdateEventType.ARTIST)
     led_artist_observer.delay_after_animation_finished_s = 2
 
@@ -62,10 +70,20 @@ def main():
     kv_observer = KeyValueTextObserver(key_driver=led_artist_observer, value_driver=led_song_title_observer)
     coordinator.add_observer(kv_observer)
 
+    def onTrackIdChanged(track_id: str):
+        track = None
+        if playlist is not None:
+            try:
+                track = playlist.get_by_persistent_id(track_id)
+            except ValueError:
+                track = None
+        coordinator.display_track_number(str(track.index + 100).rjust(4) if track is not None else '----')
+
     # exercise(coordinator)
     source = ShairportSyncMQTTSource(
         on_song_changed=coordinator.update_song_info,
         on_play_end=coordinator.play_ended,
+        on_track_id_changed=onTrackIdChanged,
         broker_host="jukebox4",   # or your broker's IP
         base_topic="shairport-sync",
     )

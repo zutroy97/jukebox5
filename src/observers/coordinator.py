@@ -96,6 +96,10 @@ class Coordinator:
         No-op if the message is not present."""
         self._enqueue(lambda: self._apply_message(title, text=None, ttl_s=0, display_s=0))
 
+    def display_track_number(self, text: str) -> None:
+        """Write a value to the four-digit panel display."""
+        self._enqueue(lambda: self._panelDisplay.WriteToFourDigitDisplay(text))
+
     def shutdown(self, message: str = "Shutting down coordinator") -> None:
         """Shut down the coordinator loop cleanly and wait for it to exit."""
         self._enqueue(lambda: self._apply_shutdown(message))

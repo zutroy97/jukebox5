@@ -10,6 +10,7 @@ class ShairportSyncMQTTSource:
     """Subscribes to shairport-sync MQTT metadata and calls:
         on_song_changed(artist, title, album)  — when a new track starts
         on_play_end()                          — when shairport-sync/play_end is received
+        on_track_id_changed(track_id)          — when a new track_id is received
 
     Artist and title are the priority fields. on_song_changed fires as soon as
     both are known. Album is included if it has already arrived; if it arrives
@@ -25,6 +26,7 @@ class ShairportSyncMQTTSource:
         self,
         on_song_changed: Callable[[str, str, str], None],
         on_play_end: Callable[[], None],
+        on_track_id_changed: Optional[Callable[[str], None]] = None,
         broker_host: str = "localhost",
         broker_port: int = 1883,
         base_topic: str = "shairport-sync",
@@ -33,6 +35,7 @@ class ShairportSyncMQTTSource:
         self._logger = logging.getLogger(__class__.__name__)
         self._on_song_changed = on_song_changed
         self._on_play_end = on_play_end
+        self._on_track_id_changed = on_track_id_changed
         self._broker_host = broker_host
         self._broker_port = broker_port
         self._base_topic = base_topic.rstrip("/")
@@ -142,6 +145,7 @@ class ShairportSyncMQTTSource:
             return
 
         fire_artist = fire_title = fire_album = None
+        fire_track_id = None
 
         with self._lock:
             if msg.topic == self._topic_track_id:
@@ -152,8 +156,7 @@ class ShairportSyncMQTTSource:
                     )
                     self._reset_track()
                     self._track_id = value
-                return  # track_id alone never triggers a display update
-
+                    fire_track_id = value
             elif msg.topic == self._topic_artist:
                 if self._fired:
                     # No track_id reset happened for this track (either the
@@ -172,11 +175,14 @@ class ShairportSyncMQTTSource:
                 return
 
             # Fire as soon as artist AND title are known, but only once per track.
-            if not self._fired and self._artist and self._title:
+            if msg.topic != self._topic_track_id and not self._fired and self._artist and self._title:
                 self._fired = True
                 fire_artist = self._artist
                 fire_title  = self._title
                 fire_album  = self._album  # may be None if album hasn't arrived yet
+
+        if fire_track_id is not None and self._on_track_id_changed:
+            self._on_track_id_changed(fire_track_id)
 
         if fire_artist:
             self._try_fire(fire_artist, fire_title, fire_album)
