@@ -3,6 +3,8 @@ import os
 from dataclasses import dataclass, field
 from typing import Optional
 
+DISPLAY_FIELDS = ("artist", "title", "album")
+
 
 @dataclass(frozen=True)
 class AnimationConfig:
@@ -35,6 +37,9 @@ class Config:
         `jukeboxPanel<n>` sections is active.
       - `mqtt`: shairport-sync MQTT broker connection settings.
       - `playlist`: optional override path for the playlist JSON file.
+      - `display`: has a `fields` key listing which song fields (artist,
+        title, album) to cycle through on the animated displays, and in
+        what order.
     """
 
     def __init__(self, path: Optional[str] = None) -> None:
@@ -83,3 +88,15 @@ class Config:
         if "playlist" not in self._parser:
             return None
         return self._parser["playlist"].get("path") or None
+
+    def display_fields(self) -> list:
+        if "display" not in self._parser:
+            return list(DISPLAY_FIELDS)
+
+        raw = self._parser["display"].get("fields", fallback="")
+        fields = [f.strip().lower() for f in raw.split(",") if f.strip()]
+        unknown = [f for f in fields if f not in DISPLAY_FIELDS]
+        if unknown:
+            raise ValueError(f"[display] fields has unknown value(s) {unknown}; valid values are {DISPLAY_FIELDS}")
+
+        return fields or list(DISPLAY_FIELDS)

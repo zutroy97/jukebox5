@@ -1,3 +1,4 @@
+import argparse
 import time
 import threading
 import logging
@@ -43,8 +44,8 @@ def apply_animation_config(observer, config: Config):
         observer.delay_after_animation_finished_s = animation_config.delay_after_animation_finished_s
 
 
-def main():
-    config = Config()
+def main(config_path=None):
+    config = Config(config_path)
 
     def onPanelButtonPress(key: str):
         coordinator.on_button_press(key)
@@ -74,7 +75,11 @@ def main():
     led_song_title_observer.changeAnimation(RandomTypeWriter())
     led_song_title_observer.ClearDisplayAnimation = ClearTextBlankLeftToRightAnimator()
 
-    kv_observer = KeyValueTextObserver(key_driver=led_artist_observer, value_driver=led_song_title_observer)
+    kv_observer = KeyValueTextObserver(
+        key_driver=led_artist_observer,
+        value_driver=led_song_title_observer,
+        fields=config.display_fields(),
+    )
     coordinator.add_observer(kv_observer)
 
     def onTrackIdChanged(track_id: str):
@@ -108,6 +113,15 @@ def main():
 
 
 if __name__ == '__main__':
+    arg_parser = argparse.ArgumentParser()
+    arg_parser.add_argument(
+        '-c', '--config',
+        dest='config_path',
+        default=None,
+        help="Path to the config INI file (default: src/config.ini)",
+    )
+    args = arg_parser.parse_args()
+
     formatter = logging.Formatter(
         fmt='%(asctime)s.%(msecs)03d %(name)s %(levelname)s %(message)s',
         datefmt='%M:%S'
@@ -118,4 +132,4 @@ if __name__ == '__main__':
     logger.addHandler(handler)
     logger.setLevel(logging.DEBUG)
 
-    main()
+    main(args.config_path)

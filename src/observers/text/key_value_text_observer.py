@@ -8,6 +8,9 @@ from observer_states import ObserverStates
 
 _FINISHED_STATES = frozenset([ObserverStates.ANIMATION_FINISHED, ObserverStates.IDLE])
 
+FIELD_LABELS = {"artist": "Artist", "title": "Title", "album": "Album"}
+DEFAULT_FIELDS = ("artist", "title", "album")
+
 
 class _State(Enum):
     ANIMATING = auto()
@@ -16,15 +19,21 @@ class _State(Enum):
 
 
 class KeyValueTextObserver(ObserverBase):
-    """Cycles through artist, title, album (if present), and any active
-    custom messages on two displays:
+    """Cycles through the configured song fields (artist/title/album) and any
+    active custom messages on two displays:
         key_driver   (8-char)  — label:  'Artist', 'Title', 'Album', or a message title
         value_driver (12-char) — value:  the corresponding text
 
     The between-pair pause uses key_driver.delay_after_animation_finished_s.
     Album is only included in the cycle when non-empty. Custom messages
-    (added via Coordinator.add_message) are appended after Artist/Title/Album
+    (added via Coordinator.add_message) are appended after the song fields
     and keep cycling — even with nothing playing — until removed or expired.
+
+    `fields` (kwarg) selects which song fields to show and in what order —
+    defaults to ('artist', 'title', 'album'). Coordinator always delivers a
+    new song as artist, then album (if any), then title, in that order — so
+    the cycle is (re)built and shown once title lands, which is always last,
+    rather than trying to show each field the instant it arrives.
     """
 
     def __init__(self, **kwargs) -> None:
@@ -39,9 +48,13 @@ class KeyValueTextObserver(ObserverBase):
         self._value_driver: SingleTextLineAnimatedObserver = kwargs['value_driver']
         self._value_driver.auto_loop = False
 
-        self._artist: str = ""
-        self._song_title: str = ""
-        self._album: str = ""
+        fields = kwargs.get('fields', DEFAULT_FIELDS)
+        unknown = [f for f in fields if f not in FIELD_LABELS]
+        if unknown:
+            raise ValueError(f"Unknown display field(s) {unknown}; valid fields are {tuple(FIELD_LABELS)}")
+        self._fields: list[str] = list(fields)
+
+        self._values: dict[str, str] = {"artist": "", "title": "", "album": ""}
         self._cycle: list[tuple[str, str]] = []
         self._kv_state: _State = _State.IDLE
         self._pause_until: float = 0.0
@@ -53,11 +66,12 @@ class KeyValueTextObserver(ObserverBase):
     def _build_cycle(self) -> list[tuple[str, str]]:
         self._purge_expired_messages()
         cycle: list[tuple[str, str]] = []
-        if self._artist or self._song_title:
-            cycle.append(("Artist", self._artist))
-            cycle.append(("Title", self._song_title))
-            if self._album:
-                cycle.append(("Album", self._album))
+        if self._values["artist"] or self._values["title"]:
+            for field in self._fields:
+                value = self._values[field]
+                if field == "album" and not value:
+                    continue
+                cycle.append((FIELD_LABELS[field], value))
         cycle.extend((m.title, m.text) for m in self._message_rotation)
         return cycle
 
@@ -94,9 +108,7 @@ class KeyValueTextObserver(ObserverBase):
     def _reset_song_and_resume_messages(self) -> None:
         """Clear the current song and drop back to idle (or straight back
         into the message rotation, if anything's still active there)."""
-        self._artist = ""
-        self._song_title = ""
-        self._album = ""
+        self._values = {"artist": "", "title": "", "album": ""}
         self._go_idle_or_resume_messages()
         self._key_driver._driver.clear()
         self._value_driver._driver.clear()
@@ -106,21 +118,27 @@ class KeyValueTextObserver(ObserverBase):
     # ------------------------------------------------------------------
 
     def updated_artist(self, artist: str, **kwargs) -> None:
-        self._artist = artist
+        self._values["artist"] = artist
         # Clear album — a new track is starting and album hasn't arrived
-        # yet. If an ALBUM update follows, it's added to the cycle then.
-        self._album = ""
-        # Interrupt immediately with artist; queue title after.
-        self._cycle = [("Title", self._song_title)]
-        self._show_pair("Artist", self._artist)
+        # yet. If an ALBUM update follows, it lands before title (below).
+        self._values["album"] = ""
 
     def updated_song_title(self, song_title: str, **kwargs) -> None:
-        self._song_title = song_title
-        self._update_cycle_entry("Title", self._song_title)
+        self._values["title"] = song_title
+        # Title is always the last field Coordinator delivers for a new
+        # song (artist, then album if any, then title) — so this is the
+        # point at which the full set of fields for the song is known.
+        # Interrupt whatever's currently showing and start the new cycle.
+        self._cycle = self._build_cycle()
+        if self._cycle:
+            self._show_pair(*self._cycle.pop(0))
+        else:
+            self._go_idle_or_resume_messages()
 
     def updated_album(self, album: str, **kwargs) -> None:
-        self._album = (album or '').strip()
-        self._update_cycle_entry("Album", self._album)
+        self._values["album"] = (album or '').strip()
+        if "album" in self._fields:
+            self._update_cycle_entry("Album", self._values["album"])
 
     def playback_stopped(self, **kwargs) -> None:
         self._reset_song_and_resume_messages()
