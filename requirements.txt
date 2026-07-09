@@ -1,4 +1,5 @@
 Adafruit-Blinka==9.1.0
+Adafruit-Blinka-Raspberry-Pi5-Neopixel==1.0.0rc2
 adafruit-circuitpython-busdevice==5.2.17
 adafruit-circuitpython-connectionmanager==3.1.8
 adafruit-circuitpython-ht16k33==4.6.17
@@ -10,9 +11,12 @@ binho-host-adapter==0.1.6
 fair_async_rlock==1.0.7
 future==1.0.0
 iso8601==2.1.0
+paho-mqtt==2.1.0
 pyftdi==0.57.1
 pyserial==3.5
 pyusb==1.3.1
 PyYAML==6.0.3
-serial==0.0.97
+RPi.GPIO==0.7.1
+rpi_ws281x==5.0.0
+sysv_ipc==1.2.0
 typing_extensions==4.15.0
