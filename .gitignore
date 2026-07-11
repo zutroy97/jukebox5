@@ -216,22 +216,3 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
-
-# Linux kernel module build artifacts (jukeboxPanelModule/)
-*.ko
-*.o
-*.mod
-*.mod.c
-.*.cmd
-.tmp_versions/
-.cache.mk
-Module.symvers
-modules.order
-Module.markers
-
-# OS / editor cruft
-.DS_Store
-Thumbs.db
-*.swp
-*.swo
-*~

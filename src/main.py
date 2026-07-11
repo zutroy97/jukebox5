@@ -8,7 +8,7 @@ from animations import RandomTypeWriter
 from animations.abstract_clear_animator import ClearTextBlankLeftToRightAnimator
 from config import Config, PanelConfig
 from observers import UpdateEventType, Coordinator, SingleTextLineAnimatedObserver, KeyValueTextObserver
-from panel.panel_input_base import JukeboxPanelArduinoSerial, JukeboxPanelGPIODevice
+from panel.panel_input_base import JukeboxPanelArduinoSerial
 from playlist import Playlist
 from shairport_mqtt import ShairportSyncMQTTSource
 
@@ -28,13 +28,9 @@ def build_panel(panel_config: PanelConfig, onButtonPress):
         panelSerial = Serial(port=port, baudrate=baud, timeout=None)
         return JukeboxPanelArduinoSerial(port=panelSerial, onButtonPress=onButtonPress)
 
-    if panel_config.name == "Raspberry Pi GPIO Linux Driver":
-        device = panel_config.options["device"]
-        return JukeboxPanelGPIODevice(device=device, onButtonPress=onButtonPress)
-
     raise ValueError(
         f"Unsupported jukeboxPanel driver {panel_config.name!r} in config.ini "
-        "(only 'Serial' and 'Raspberry Pi GPIO Linux Driver' are currently implemented)"
+        "(only 'Serial' is currently implemented)"
     )
 
 
