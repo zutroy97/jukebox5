@@ -56,19 +56,18 @@ Wires+--5--4--3--2--1--+
 
 ### Display Output Protocol
 
-The displays are driven by shift registers that accept a synchronous serial stream, clocked in on the rising edge of `CLOCK`, with bit timing controlled by explicit delays rather than a fixed baud rate.
+Each display is driven by an MM5450 or MM5451 LED display driver chip (National Semiconductor / Microchip), which accepts a synchronous serial stream clocked in on the rising edge of `CLOCK`, with bit timing controlled by explicit delays rather than a fixed baud rate.
 
-A full display update is a **36-clock-pulse transaction**:
+Per the MM5450/MM5451 datasheet, a full display update is a **36-clock-pulse transaction** — 1 start bit plus exactly 35 data bits, with no separate load/latch signal (the chip auto-latches after the 36th clock):
 
 1. **Enable phase** — raise `DISPLAY_ENABLE`.
-2. **Start condition** — drive both data lines HIGH simultaneously, pulse `CLOCK` low→high, then hold for 400µs. This distinct "both lines high" pattern acts as a frame marker distinguishing a new transaction.
-3. **Data phase** — shift out 32 bits, one per line, LSB first. For each bit:
+2. **Start condition** — drive both data lines HIGH simultaneously, pulse `CLOCK` low→high, then hold for 400µs. A logical "1" start bit, as the very first bit of the frame.
+3. **Data phase** — shift out 35 bits total, one per line, LSB first: the first 32 come from the packed display word, the remaining 3 are zero filler. For each bit:
    - Place the bit value for `DISPLAY_4` and `DISPLAY_3` on their respective lines
    - Pulse `CLOCK` low, wait 400µs, then `CLOCK` high
 
-   Each of the two 32-bit words encodes one display's full segment pattern (and, for the 4-digit display, two auxiliary LED states packed into its top bits).
-4. **Padding phase** — send 4 additional clock pulses with both data lines held LOW. The downstream shift-register/latch hardware requires a full 36-bit frame (32 data + 4 filler) before it will latch and light the new pattern — sending only 32 leaves the display unchanged.
-5. **Commit** — drop `DISPLAY_ENABLE` low, which latches/displays the newly shifted-in values.
+   Each of the two 32-bit words encodes one display's full segment pattern (and, for the 4-digit display, two auxiliary LED states packed into its top bits). Bit 1 (the first bit after the start bit) lands on the chip's Output 1, and so on in order — so the 32-bit word occupies Outputs 1-32, with Outputs 33-35 always off (zero filler).
+4. **Commit** — drop `DISPLAY_ENABLE` low. The chip itself already latched the new pattern automatically at clock 36; dropping enable here matches the driver's idle level between writes.
 
 Each character position's value is a 7-bit segment mask (bits for segments a–g), and up to four such masks are packed together (7 bits each) into the 32-bit word shifted per display, most-significant character first (the source string is reversed before encoding).
 
