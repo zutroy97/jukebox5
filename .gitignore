@@ -216,3 +216,17 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Linux kernel module build artifacts
+*.o
+*.o.cmd
+*.mod
+*.mod.c
+*.mod.o
+*.ko
+*.ko.cmd
+.*.cmd
+.tmp_versions/
+modules.order
+Module.symvers
+Module.markers
