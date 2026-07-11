@@ -31,9 +31,9 @@ them at load time via `/etc/modprobe.d/jukebox-panel.conf` (e.g.
 | Display/keypad enable | GPIO27 | 13 | A2 <-> B2 | D4 |
 | 4-digit display data | GPIO22 | 15 | A3 <-> B3 | D7 |
 | 3-digit display data | GPIO23 | 16 | A4 <-> B4 | D8 |
-| Keypad matrix column-select bit 2 | GPIO24 | 18 | A5 <-> B5 | D12 |
-| Keypad row input 0 | GPIO25 | 22 | A6 <-> B6 | D13 |
-| Keypad row input 1 | GPIO5 | 29 | A7 <-> B7 | D14 (A0) |
+| Matrix select | GPIO24 | 18 | A5 <-> B5 | D9 |
+| Keypad row input 0 | GPIO25 | 22 | A6 <-> B6 | D10 |
+| Keypad row input 1 | GPIO5 | 29 | A7 <-> B7 | D11 |
 
 Channel 8 (A8/B8) is unused -- fine to leave floating on both sides.
 
