@@ -1,12 +1,13 @@
 # JukeboxPanel display corruption investigation — session summary
 
-Branch: `main`.
-Status: **reopened.** Display corruption, believed resolved by the TXS0108E
-bypass (see "Resolution" below), has recurred — but in a categorically
-different form this time (uniform patterns now garble too, not just mixed
-ones), while a genuine, unrelated kernel driver bug was found and fixed in
-the same session. See "2026-07-11 evening: reopened" at the end for current
-state and the next thing to check.
+Branch: `linux_ascii_panel`.
+Status: **working again**, via a display-protocol-timing revert rather
+than a hardware change. 30 consecutive mixed-pattern writes (including the
+historically worst-case `1234`/`4321`) all rendered clean, and keypad
+scanning is unaffected. Likely papering over a voltage-margin problem with
+extra timing slack rather than fixing it outright -- see "2026-07-12:
+resolved (for now)" at the end for the full reasoning and why this
+probably isn't the final word.
 
 ## The symptom
 
@@ -296,3 +297,81 @@ Reasoning so far, not yet confirmed:
 5. `config.ini`'s `[jukeboxPanel].option` is currently pointed at
    `jukeboxPanel1` (Linux driver) as a local uncommitted change, left that
    way deliberately so the next session can pick up testing immediately.
+
+## 2026-07-12: resolved (for now)
+
+Picking up from "Next steps" above: the resync self-heal test (repeating
+`w4 8888` 5x with no `off` in between) came back "still garbled, but not
+as bad" -- not a clean self-heal, but not zero effect either. That
+pattern (partial, inconsistent improvement, not "always fails identically"
+and not "resolves completely") doesn't fit a fully open/broken wire, which
+would fail the same way every time regardless of retries.
+
+Reseating the `clock` connection and power-cycling the panel (the most
+thorough reset available, short of physically reworking a joint) both
+produced no change, ruling out both a loose `clock` contact specifically
+and any software/sync-recoverable explanation. Slowing `bit_delay_us` 5x
+(400us -> 2000us) also produced no change, ruling out crosstalk/edge-rate
+between the bypass wires as the mechanism -- a voltage-margin problem is a
+DC characteristic, not a timing one, so slower edges shouldn't matter, and
+they didn't.
+
+The turning point: the user pointed out there are several other chips and
+passive components on the board between the connector the bypass wires
+attach to and the MM5450 shift registers themselves -- something neither
+this doc nor the reasoning up to this point had accounted for. Everything
+so far had only reasoned against the MM5450's own datasheet threshold
+(>=2.2V for a logic HIGH at 5V VDD, comfortably cleared by 3.3V). But the
+bare-wire bypass removed *all* level translation for the whole path, not
+just for the MM5450 -- if any intermediate chip is an ordinary 5V CMOS
+part (roughly 0.7x VDD = ~3.5V needed for a reliable HIGH), a bare 3.3V
+signal sits right at an ambiguous margin against it. This also explains
+why the original Arduino hardware (a 5V-native Nano) never showed any of
+this: full 5V overdrive against any such threshold, regardless of timing.
+
+That reframing pointed at reverting `82c8563`'s timing changes as worth
+retrying -- not because the datasheet-vs-reference framing question it
+was about was wrong, but because `write_bit()`'s extra post-clock-high
+delay it removed adds dwell time to every transition, which is exactly
+the kind of thing that would paper over a marginal-voltage threshold
+crossing without fixing the underlying shortfall. Reverted `write_bit()`,
+`update_display()`, and `scan_keypad_raw()` to their pre-`82c8563`
+behavior (commit `c3486af`) and retested:
+
+- 30 consecutive `w4` writes with mixed patterns, including the
+  historically worst-case `1234`/`4321` repeated throughout the run, all
+  rendered clean -- well past the original "4 good then fails and stays
+  failed" characteristic, and covering exactly the pattern class that
+  never worked even under the TXS0108E.
+- Keypad scanning (whose behavior also reverted, per `scan_keypad_raw()`)
+  re-verified clean: 8 distinct keys read correctly via raw `cat`.
+- Full app (`main.py`, Linux driver active) restarted cleanly and the
+  user confirmed track-selection display looked correct while typing.
+
+**This is very likely a mitigation, not a fix.** It's plausible extra
+timing margin is masking a standing voltage-margin shortfall against an
+unknown chip, which could resurface under different temperature, supply
+voltage, or component-aging conditions. The more robust fix discussed but
+not yet built: an HCT-family buffer (`74HCT541`/`74HCT244`/`74AHCT125`)
+between the Pi's 3.3V GPIO outputs and the board, since HCT parts have
+TTL-compatible input thresholds (~2V) regardless of their own 5V supply,
+giving a clean full-swing 5V output regardless of what any downstream
+chip's actual threshold turns out to be -- removing the ambiguity
+entirely rather than out-waiting it. Worth revisiting if corruption
+returns, or as deliberate hardening even if it doesn't.
+
+Also fixed this session, both independent of the display corruption
+question:
+- `jukebox_panel.c`'s `queue_button_event()` had a one-byte-too-small
+  buffer that silently dropped the trailing `\n` off every button event
+  this driver has ever emitted (commit `a88f289`).
+- `jukebox_read()` returned a spurious EOF (0-byte read) when two readers
+  raced for the same queued event -- observed as `cat /dev/jukebox_panel`
+  exiting with no Ctrl-C while `main.py` was also reading (commit
+  `4cfc2c7`).
+- `main.py`'s `onPanelButtonPress` closure could crash on an early button
+  press racing `coordinator`'s assignment, permanently killing the read
+  thread's ability to handle any future press (commit `8f7220d`).
+
+All of this session's work lives on `linux_ascii_panel`, not yet merged to
+`main`.
