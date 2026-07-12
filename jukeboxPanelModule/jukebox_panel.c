@@ -319,7 +319,7 @@ static DECLARE_WAIT_QUEUE_HEAD(button_wait);
 
 static void queue_button_event(char key)
 {
-	char event[6];
+	char event[7]; /* "BTN:" + digit/R/P + '\n' = 6 data bytes, +1 for scnprintf's NUL */
 	int len = scnprintf(event, sizeof(event), "BTN:%c\n", key);
 
 	mutex_lock(&button_fifo_mutex);
