@@ -463,19 +463,33 @@ static ssize_t jukebox_read(struct file *filp, char __user *buf, size_t count, l
 	unsigned int copied;
 	int ret;
 
-	if (kfifo_is_empty(&button_fifo)) {
-		if (filp->f_flags & O_NONBLOCK)
-			return -EAGAIN;
-		ret = wait_event_interruptible(button_wait, !kfifo_is_empty(&button_fifo));
+	/* Looping instead of returning after one wait/copy pair matters with
+	 * more than one reader open on this device: two readers can both wake
+	 * from wait_event_interruptible when an event arrives, but only one
+	 * wins the race to actually drain it via kfifo_to_user below. Without
+	 * the loop, the loser would copy 0 bytes and return 0 -- which read()
+	 * callers universally treat as EOF, causing e.g. `cat` to exit cleanly
+	 * as if the stream had ended, even though this driver never actually
+	 * signals EOF. Looping back to wait again produces the correct
+	 * behavior: keep blocking until this reader gets a real event. */
+	do {
+		if (kfifo_is_empty(&button_fifo)) {
+			if (filp->f_flags & O_NONBLOCK)
+				return -EAGAIN;
+			ret = wait_event_interruptible(button_wait, !kfifo_is_empty(&button_fifo));
+			if (ret)
+				return ret;
+		}
+
+		mutex_lock(&button_fifo_mutex);
+		ret = kfifo_to_user(&button_fifo, buf, count, &copied);
+		mutex_unlock(&button_fifo_mutex);
+
 		if (ret)
 			return ret;
-	}
+	} while (copied == 0);
 
-	mutex_lock(&button_fifo_mutex);
-	ret = kfifo_to_user(&button_fifo, buf, count, &copied);
-	mutex_unlock(&button_fifo_mutex);
-
-	return ret ? ret : copied;
+	return copied;
 }
 
 /* Without this, select()/poll() on the fd always report "ready" (the VFS
