@@ -1,7 +1,11 @@
 # JukeboxPanel display corruption investigation — session summary
 
 Branch: `driver_woes` (commits `2da2d44`, `82c8563` as of this writing).
-Status: **unresolved, paused mid-test** — waiting on a wiring change (level-shifter bypass) after a Pi power-down.
+Status: **resolved.** The TXS0108E level-shifter bypass (see below) fixed the
+display corruption. It also caused a follow-on symptom — six keypad buttons
+silently not registering — which was a wiring mistake made during the bypass
+itself, not a new instance of the level-shifter problem. See "Resolution"
+section at the end.
 
 ## The symptom
 
@@ -144,3 +148,41 @@ to make this wiring change, and will resume testing after.
   sketch (`JukeboxPanel.cpp`/`.h`/`.ino`), now committed as the
   authoritative reference for this protocol — supersedes the
   MM5450/MM5451 datasheet's own framing description where they disagree.
+
+## Resolution
+
+The planned bypass (Pi GPIO wired directly to the board's D2/D4/D7/D8/D9,
+skipping the TXS0108E for the 5 output lines — clock, enable, data4, data3,
+matrix_c) fixed the display corruption. This confirms the TXS0108E was the
+actual root cause of the original symptom, not a protocol/timing/software
+issue — consistent with everything in the "ruled out" list above.
+
+### Follow-on: six keypad buttons went silent after the bypass
+
+Immediately after the bypass, buttons `1 3 4 6 7 9` stopped registering
+while `0 2 5 8 R P` kept working. This looked alarming (like the
+level-shifter problem had just moved to the input side) but turned out to
+be unrelated: **`keypad_in0` (GPIO25, level-shifter channel A6/B6) got
+physically disconnected during the bypass rewiring itself**, and simply
+needed to be reconnected. Worth recording *how* this was diagnosed in
+software, without touching the hardware, since the same trick is useful
+for any future one-line-stuck-at-X symptom:
+
+`scan_keypad_raw()` packs the two row inputs into one 16-bit word — the low
+byte is `keypad_in0` across all 8 scan steps, the high byte is
+`keypad_in1`. Decoding the fixed signature table in `raw_to_key()` by byte
+showed every *working* key's signature had low byte `0xFF` (never needs
+`keypad_in0` to read low), and every *non-working* key's signature needed
+`keypad_in0` to drop low at some step. That's the signature of one input
+line stuck permanently high, not six independent flaky keys — which
+pointed straight at `keypad_in0`/GPIO25 rather than a keypad-wide or
+software issue, before any multimeter came out.
+
+Note for next time: `keypad_in0`/`keypad_in1` still route through the
+TXS0108E (only the 5 output lines were bypassed) since they're 5V board
+signals into 3.3V-max Pi inputs — don't bare-wire-bypass those the way the
+outputs were bypassed without a proper divider or unidirectional buffer.
+
+**Status now:** display writes and all keypad buttons confirmed working.
+`main` is still out of date relative to `driver_woes` (see above) — worth
+merging now that both symptoms are resolved.
