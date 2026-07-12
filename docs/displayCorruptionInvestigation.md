@@ -1,11 +1,12 @@
 # JukeboxPanel display corruption investigation — session summary
 
-Branch: `driver_woes` (commits `2da2d44`, `82c8563` as of this writing).
-Status: **resolved.** The TXS0108E level-shifter bypass (see below) fixed the
-display corruption. It also caused a follow-on symptom — six keypad buttons
-silently not registering — which was a wiring mistake made during the bypass
-itself, not a new instance of the level-shifter problem. See "Resolution"
-section at the end.
+Branch: `main`.
+Status: **reopened.** Display corruption, believed resolved by the TXS0108E
+bypass (see "Resolution" below), has recurred — but in a categorically
+different form this time (uniform patterns now garble too, not just mixed
+ones), while a genuine, unrelated kernel driver bug was found and fixed in
+the same session. See "2026-07-11 evening: reopened" at the end for current
+state and the next thing to check.
 
 ## The symptom
 
@@ -183,6 +184,115 @@ TXS0108E (only the 5 output lines were bypassed) since they're 5V board
 signals into 3.3V-max Pi inputs — don't bare-wire-bypass those the way the
 outputs were bypassed without a proper divider or unidirectional buffer.
 
-**Status now:** display writes and all keypad buttons confirmed working.
-`main` is still out of date relative to `driver_woes` (see above) — worth
-merging now that both symptoms are resolved.
+**Status now (superseded by the section below):** display writes and all
+keypad buttons confirmed working. `main` is still out of date relative to
+`driver_woes` (see above) — worth merging now that both symptoms are
+resolved.
+
+## 2026-07-11 evening: reopened
+
+After the above was written and merged to `main`, two new pieces of work
+happened in the same session, one a confirmed fix and one an open problem:
+
+### Confirmed fix: kernel driver was silently dropping the newline on every button event
+
+Built `src/panel/jukebox_panel_linux_ascii.py`
+(`JukeboxPanelLinuxAsciiModule`) to talk to `/dev/jukebox_panel` directly
+from Python using the existing text protocol, and wired it into
+`build_panel()` in `main.py` under the `"Raspberry Pi GPIO Linux Driver"`
+config name (`[jukeboxPanel1]` in `config.ini`, `device=/dev/jukebox_panel`).
+Switching `config.ini`'s `[jukeboxPanel].option` to `jukeboxPanel1` and
+running the app end-to-end, the keypad appeared completely dead through
+this new module — but a raw `cat /dev/jukebox_panel` showed the kernel
+driver *was* seeing every press correctly.
+
+Root cause, in `jukeboxPanelModule/jukebox_panel.c`'s `queue_button_event()`:
+
+```c
+char event[6];
+int len = scnprintf(event, sizeof(event), "BTN:%c\n", key);
+```
+
+`"BTN:%c\n"` is 6 data bytes (`B`,`T`,`N`,`:`,char,`\n`), but `scnprintf`
+also needs room for a NUL terminator, so a 6-byte buffer only ever fit 5
+data bytes — the trailing `\n` was silently truncated on *every* button
+event this driver has ever emitted. Consecutive presses ran together with
+no delimiter (`BTN:8BTN:3BTN:7BTN:2`, no separators at all), which any
+newline-delimited reader (my new module's `split('\n')`, and in principle
+any future consumer) would parse as zero complete lines. This was never
+caught before because nothing had strictly required the `\n` boundary
+until this module existed — `JukeboxPanelArduinoSerial` never hit it since
+it talks to different (correctly-behaved) Arduino firmware over serial,
+not this kernel driver.
+
+Fix: `char event[7]`. Rebuilt (`make` in `jukeboxPanelModule/`), reloaded
+(`sudo rmmod jukebox_panel && sudo insmod jukebox_panel.ko` — needs to be
+run manually, no passwordless sudo on this box). Confirmed via raw `cat`
+(now shows proper `BTN:X\n` lines with `cat -A`) and via the new Python
+module directly (all 12 keys received correctly by `onButtonPress`). **Not
+yet committed** — sitting as a working-tree change in
+`jukeboxPanelModule/jukebox_panel.c`, along with the new
+`jukebox_panel_linux_ascii.py` and the `main.py`/`build_panel()` wiring.
+
+### Open problem: display corruption is back, and worse than before
+
+Running the full app with the Linux driver active, the panel display
+looked corrupted and track selection mostly failed. Isolated the display
+part directly (bypassing the app) by sending known patterns straight to
+`/dev/jukebox_panel`: **`w4 8888` and `off` now garble too** — not just
+mixed patterns like `1234`/`4321`. This is a materially different symptom
+from the original investigation above, where uniform patterns were the one
+thing that *always* rendered correctly (that was the key evidence pointing
+at the TXS0108E's simultaneous-multi-channel-switching weakness at the
+time).
+
+Reasoning so far, not yet confirmed:
+- Keypad scanning was independently verified perfect in this same session
+  (raw `cat` test, all 12 keys, clean signatures). `scan_keypad_raw()`
+  drives `enable`, `data4`, `data3`, and `matrix_c` — the same four lines
+  `update_display()` uses. It never touches `clock`. That makes `clock`
+  (Pi GPIO17 → board D2, one of the 5 lines direct-wire-bypassed around
+  the level shifter) the one signal exercised by display writes but not by
+  the keypad scan that just proved everything else on that bypass is
+  intact. Not yet physically checked.
+- No code in `write_bit()`/`update_display()` has changed since displays
+  last looked good (only `queue_button_event()`'s buffer size changed,
+  which is unrelated). So this looks like a new physical fault introduced
+  sometime during the recent hardware handling (the `keypad_in0`
+  reconnection, or handling the board again for the module rebuild),
+  rather than a logic regression.
+- Tested whether repeated writes of the same uniform pattern (`w4 8888`
+  sent 5x in a row, no `off` in between) would self-heal, on the theory
+  that the MM5450 has no dedicated reset pin and finds frame boundaries by
+  watching for a start-bit pattern (both data lines high together) rather
+  than a hard frame marker — so a one-time missed/extra clock edge could
+  desync the chip's idea of where a frame starts, corrupting even
+  legitimately-uniform data until it resyncs. **Result of that test was
+  not observed** — session ended (user stepped away from the machine)
+  before checking the display after the 5 repeated writes.
+
+### Next steps (pick up here)
+
+1. **First thing to check:** did the 5x-repeated `w4 8888` test (already
+   sent, see command run right before session end) come back clean on any
+   of the 5 attempts? If yes, this points at intermittent signal
+   integrity/resync rather than a hard break, and a software resync
+   (holding both data lines low for many clock pulses before a real write)
+   is worth adding as a real fix. If no — it never self-heals — that rules
+   out resync and points back at a physical fault.
+2. **Second:** physically check continuity on the `clock` line (Pi GPIO17
+   ↔ board D2), the one line display writes need that the just-verified
+   keypad scan doesn't touch.
+3. Once display is confirmed good again, retest track selection through
+   the full app — the keypad-to-track-selection *logic* itself was already
+   confirmed working in this session (`617` successfully matched a
+   playlist entry and issued `queue_next` over MQTT via the logs), so that
+   part likely doesn't need further debugging once the display is legible
+   again.
+4. Commit the confirmed newline-buffer fix, the new
+   `JukeboxPanelLinuxAsciiModule`, and its `main.py` wiring — these are
+   validated independently of the display corruption problem and don't
+   need to wait on it.
+5. `config.ini`'s `[jukeboxPanel].option` is currently pointed at
+   `jukeboxPanel1` (Linux driver) as a local uncommitted change, left that
+   way deliberately so the next session can pick up testing immediately.
