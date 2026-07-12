@@ -52,8 +52,18 @@ def apply_animation_config(observer, config: Config):
 def main(config_path=None):
     config = Config(config_path)
 
+    # build_panel() below starts a background thread that can call this
+    # immediately -- e.g. the kernel driver's kfifo may already hold a
+    # queued press from before this process even started -- which can be
+    # well before `coordinator` is assigned a few lines down. Route through
+    # this holder instead of closing over `coordinator` directly so a stray
+    # early event is dropped rather than crashing (and permanently killing)
+    # the read thread with an unbound-variable NameError.
+    coordinator_holder = []
+
     def onPanelButtonPress(key: str):
-        coordinator.on_button_press(key)
+        if coordinator_holder:
+            coordinator_holder[0].on_button_press(key)
 
     def onTrackSelected(entered: str):
         track = playlist.get_by_index(int(entered) - TRACK_INDEX_OFFSET) if playlist is not None else None
@@ -64,6 +74,7 @@ def main(config_path=None):
 
     panel = build_panel(config.panel(), onPanelButtonPress)
     coordinator = Coordinator(panelButtons=panel, panelDisplay=panel, on_selection_complete=onTrackSelected)
+    coordinator_holder.append(coordinator)
 
     try:
         playlist = Playlist(path=config.playlist_path())
