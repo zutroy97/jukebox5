@@ -217,6 +217,10 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 
+# macOS Finder metadata (AirDrop / network share folders)
+.DS_Store
+._.DS_Store
+
 # Linux kernel module build artifacts
 *.o
 *.o.cmd
