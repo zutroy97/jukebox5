@@ -147,11 +147,7 @@ static struct gpio_desc *desc_matrix_c;
 static struct gpio_desc *desc_keypad_in0;
 static struct gpio_desc *desc_keypad_in1;
 
-/* Caller must hold gpio_mutex. Matches JukeboxPanel::writeBit() exactly:
- * the 400us settle only happens before the rising edge (which is what the
- * MM5450/MM5451 actually latches data on); there is deliberately no delay
- * after raising the clock -- the next bit's falling edge follows almost
- * immediately, same as the proven Arduino reference. */
+/* Caller must hold gpio_mutex. */
 static void write_bit(int d3, int d4)
 {
 	gpiod_set_raw_value(desc_data3, d3);
@@ -159,15 +155,15 @@ static void write_bit(int d3, int d4)
 	gpiod_set_raw_value(desc_clock, 0);
 	udelay(bit_delay_us);
 	gpiod_set_raw_value(desc_clock, 1);
+	udelay(bit_delay_us);
 }
 
 /* Caller must hold gpio_mutex. Shifts display3_line/display4_line out to
- * the hardware, mirroring JukeboxPanel::UpdateDisplay() exactly: a start
- * bit, 32 data bits LSB-first, then 4 trailing bits (37 clocks total) --
- * this is what the reference implementation actually sends and has run
- * reliably on real hardware for years, even though the MM5450/MM5451
- * datasheet's own framing (1 start + 35 data = 36 clocks) would suggest
- * one less filler bit. */
+ * the hardware. The receiving chips are MM5450/MM5451 LED display drivers:
+ * per datasheet, a frame is a start bit ('1') followed by exactly 35 data
+ * bits, latched automatically after the 36th clock -- there is no separate
+ * load/latch pulse. Our 32-bit display{3,4}_line supplies the first 32 of
+ * those 35 bits (LSB first); the remaining 3 are sent as zero filler. */
 static void update_display(void)
 {
 	int i;
@@ -183,7 +179,7 @@ static void update_display(void)
 			  (display4_line & mask) ? 1 : 0);
 	}
 
-	for (i = 0; i < 4; i++)
+	for (i = 0; i < 3; i++)
 		write_bit(0, 0);
 
 	gpiod_set_raw_value(desc_enable, 0);
@@ -281,7 +277,15 @@ static u16 scan_keypad_raw(void)
 			result |= BIT(i + 8);
 	}
 
-	gpiod_set_raw_value(desc_enable, 1);
+	/* Restore the shared data/select lines to their display-mode idle
+	 * level. The loop's last step (i=7) leaves data4/data3/matrix_c all
+	 * driven HIGH, and since this scan runs continuously in the
+	 * background every keypad_scan_period_ms, that HIGH state (and the
+	 * walk through it on every scan) would otherwise bleed onto the
+	 * display's data/select bus between/after writes. */
+	gpiod_set_raw_value(desc_data4, 0);
+	gpiod_set_raw_value(desc_data3, 0);
+	gpiod_set_raw_value(desc_matrix_c, 0);
 
 	return result;
 }

@@ -56,19 +56,18 @@ Wires+--5--4--3--2--1--+
 
 ### Display Output Protocol
 
-Each display is driven by an MM5450 LED display driver chip (National Semiconductor / Microchip), which accepts a synchronous serial stream clocked in on the rising edge of `CLOCK`, with bit timing controlled by explicit delays rather than a fixed baud rate. This section describes what the proven Arduino reference implementation (`docs/ArduinoRefJukeboxPanel/JukeboxPanel.cpp`) actually does, which is authoritative over the MM5450/MM5451 datasheet's own framing description (1 start + 35 data = 36 clocks) -- the reference sends one extra filler bit (37 clocks total) and has run correctly on real hardware for years.
+Each display is driven by an MM5450 or MM5451 LED display driver chip (National Semiconductor / Microchip), which accepts a synchronous serial stream clocked in on the rising edge of `CLOCK`, with bit timing controlled by explicit delays rather than a fixed baud rate.
 
-A full display update is a **37-clock-pulse transaction**:
+Per the MM5450/MM5451 datasheet, a full display update is a **36-clock-pulse transaction** — 1 start bit plus exactly 35 data bits, with no separate load/latch signal (the chip auto-latches after the 36th clock):
 
 1. **Enable phase** — raise `DISPLAY_ENABLE`.
 2. **Start condition** — drive both data lines HIGH simultaneously, pulse `CLOCK` low→high, then hold for 400µs. A logical "1" start bit, as the very first bit of the frame.
-3. **Data phase** — shift out 32 bits, one per line, LSB first. For each bit:
+3. **Data phase** — shift out 35 bits total, one per line, LSB first: the first 32 come from the packed display word, the remaining 3 are zero filler. For each bit:
    - Place the bit value for `DISPLAY_4` and `DISPLAY_3` on their respective lines
-   - Pulse `CLOCK` low, wait 400µs, then `CLOCK` high (no additional wait after raising the clock -- the next bit's falling edge follows immediately)
+   - Pulse `CLOCK` low, wait 400µs, then `CLOCK` high
 
-   Each of the two 32-bit words encodes one display's full segment pattern (and, for the 4-digit display, two auxiliary LED states packed into its top bits).
-4. **Padding phase** — send 4 additional clock pulses with both data lines held LOW.
-5. **Commit** — drop `DISPLAY_ENABLE` low, which latches/displays the newly shifted-in values.
+   Each of the two 32-bit words encodes one display's full segment pattern (and, for the 4-digit display, two auxiliary LED states packed into its top bits). Bit 1 (the first bit after the start bit) lands on the chip's Output 1, and so on in order — so the 32-bit word occupies Outputs 1-32, with Outputs 33-35 always off (zero filler).
+4. **Commit** — drop `DISPLAY_ENABLE` low. The chip itself already latched the new pattern automatically at clock 36; dropping enable here matches the driver's idle level between writes.
 
 Each character position's value is a 7-bit segment mask (bits for segments a–g), and up to four such masks are packed together (7 bits each) into the 32-bit word shifted per display, most-significant character first (the source string is reversed before encoding).
 
@@ -76,7 +75,7 @@ Each character position's value is a 7-bit segment mask (bits for segments a–g
 
 ### Keypad Input Protocol
 
-The keypad is not wired as simple discrete buttons — it's read as a **scanned matrix**, and it reuses the display's data/select lines as a 3-bit address bus while `DISPLAY_ENABLE` is held low during the scan (disconnecting the display drivers so they don't fight the scan). `DISPLAY_ENABLE` is raised back high once the scan completes, and the data/select lines are simply left at whatever the last scan step drove them to -- matching the proven Arduino reference exactly. Neither is explicitly restored to an "idle" level, since the next `UpdateDisplay()` call always drives them from scratch anyway.
+The keypad is not wired as simple discrete buttons — it's read as a **scanned matrix**, and it reuses the display's data/select lines as a 3-bit address bus while `DISPLAY_ENABLE` is held low (disconnecting the display drivers so they don't fight the scan).
 
 For each of **8 scan steps** (address `0`–`7`):
 
