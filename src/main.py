@@ -71,15 +71,25 @@ def main(config_path=None):
         if coordinator_holder:
             coordinator_holder[0].on_button_press(key)
 
-    def onTrackSelected(entered: str):
+    def onTrackSelected(entered: str) -> bool:
         track = playlist.get_by_index(int(entered) - TRACK_INDEX_OFFSET) if playlist is not None else None
         if track is not None:
             source.queue_next(track.persistent_id)
         else:
             logger.info(f"No playlist track matches selection {entered}")
+        return track is not None
 
     panel = build_panel(config.panel(), onPanelButtonPress)
-    coordinator = Coordinator(panelButtons=panel, panelDisplay=panel, on_selection_complete=onTrackSelected)
+    feedback_config = config.track_selection_feedback()
+    coordinator = Coordinator(
+        panelButtons=panel,
+        panelDisplay=panel,
+        on_selection_complete=onTrackSelected,
+        blink_count=feedback_config.blink_count,
+        blink_phase_s=feedback_config.blink_phase_s,
+        error_text=feedback_config.error_text,
+        error_duration_s=feedback_config.error_duration_s,
+    )
     coordinator_holder.append(coordinator)
 
     try:

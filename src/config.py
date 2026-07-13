@@ -26,6 +26,16 @@ class MQTTConfig:
     base_topic: str = "shairport-sync"
 
 
+@dataclass(frozen=True)
+class TrackSelectionFeedbackConfig:
+    """Feedback shown on the 4-digit display after a 3-digit keypad
+    selection completes, before it reverts to the current-track display."""
+    blink_count: int = 3
+    blink_phase_s: float = 0.25
+    error_text: str = "Err"
+    error_duration_s: float = 2.0
+
+
 class Config:
     """Parses the jukebox's INI config file (defaults to src/config.ini).
 
@@ -40,6 +50,8 @@ class Config:
       - `display`: has a `fields` key listing which song fields (artist,
         title, album) to cycle through on the animated displays, and in
         what order.
+      - `trackSelectionFeedback`: blink/error timing shown on the 4-digit
+        display after a keypad track selection completes.
     """
 
     def __init__(self, path: Optional[str] = None) -> None:
@@ -82,6 +94,18 @@ class Config:
             broker_host=section.get("broker_host", fallback="localhost"),
             broker_port=section.getint("broker_port", fallback=1883),
             base_topic=section.get("base_topic", fallback="shairport-sync"),
+        )
+
+    def track_selection_feedback(self) -> TrackSelectionFeedbackConfig:
+        if "trackSelectionFeedback" not in self._parser:
+            return TrackSelectionFeedbackConfig()
+
+        section = self._parser["trackSelectionFeedback"]
+        return TrackSelectionFeedbackConfig(
+            blink_count=section.getint("blink_count", fallback=3),
+            blink_phase_s=section.getfloat("blink_phase_s", fallback=0.25),
+            error_text=section.get("error_text", fallback="Err"),
+            error_duration_s=section.getfloat("error_duration_s", fallback=2.0),
         )
 
     def playlist_path(self) -> Optional[str]:

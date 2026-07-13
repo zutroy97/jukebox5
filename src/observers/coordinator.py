@@ -13,6 +13,20 @@ class _TrackSelector:
 
     Only ever touched from the Coordinator's own thread (via `_enqueue` and
     the `_loop` polling below), so it needs no locking of its own.
+
+    Once 3 digits are entered, on_selection_complete(entered) is called and
+    its bool return value (True = a real match -- currently a playlist
+    track, but the same signal works for any future non-playlist command
+    too) selects one of two feedback sequences before the display reverts
+    to whatever it was showing before entry started:
+      - valid:   the entered code blinks blink_count times (blink_phase_s
+                 per on/off phase)
+      - invalid: error_text is shown for error_duration_s
+    Both are driven by the same `_deadline`/`_feedback_queue` machinery
+    entry-timeout uses, just repurposed once entry completes -- see
+    check_timeout(). Timing/text defaults match config.py's
+    TrackSelectionFeedbackConfig; see Coordinator for where config values
+    actually get here.
     """
 
     DIGIT_COUNT: int = 3
@@ -21,21 +35,35 @@ class _TrackSelector:
     def __init__(
         self,
         panel_display: JukeboxPanelOutputBase,
-        on_selection_complete: Callable[[str], None],
+        on_selection_complete: Callable[[str], bool],
         get_idle_text: Callable[[], str],
         get_idle_right_led: Callable[[], bool],
+        blink_count: int = 3,
+        blink_phase_s: float = 0.25,
+        error_text: str = "Err",
+        error_duration_s: float = 2.0,
     ) -> None:
         self._panel_display = panel_display
         self._on_selection_complete = on_selection_complete
         self._get_idle_text = get_idle_text
         self._get_idle_right_led = get_idle_right_led
+        self._blink_count = blink_count
+        self._blink_phase_s = blink_phase_s
+        self._error_text = error_text
+        self._error_duration_s = error_duration_s
         self._digits: str = ""
         self._deadline: Optional[float] = None
+        # Queue of (duration_s, text) phases still to show for the
+        # post-entry blink/error feedback sequence; None text means blank.
+        # Empty except during that sequence.
+        self._feedback_queue: list[tuple[float, Optional[str]]] = []
 
     def is_active(self) -> bool:
         return self._deadline is not None
 
     def button_pressed(self, key: str) -> None:
+        if self._feedback_queue:
+            return  # ignore input while a blink/error sequence plays out
         if key == 'R':
             self._reset()
             return
@@ -58,8 +86,23 @@ class _TrackSelector:
             return
 
         entered = self._digits
-        self._reset()
-        self._on_selection_complete(entered)
+        self._digits = ""
+        self._panel_display.LeftLedSet(False)  # entry is over, made or not
+        is_valid = self._on_selection_complete(entered)
+        self._start_feedback(entered, is_valid)
+
+    def _start_feedback(self, entered: str, is_valid: bool) -> None:
+        if is_valid:
+            on_off = (self._blink_phase_s, entered.ljust(4)), (self._blink_phase_s, None)
+            self._feedback_queue = list(on_off) * self._blink_count
+        else:
+            self._feedback_queue = [(self._error_duration_s, self._error_text.ljust(4))]
+        self._advance_feedback()
+
+    def _advance_feedback(self) -> None:
+        duration, text = self._feedback_queue.pop(0)
+        self._panel_display.WriteToFourDigitDisplay(text if text is not None else ' ' * 4)
+        self._deadline = time.monotonic() + duration
 
     def next_wakeup(self) -> Optional[float]:
         if self._deadline is None:
@@ -67,12 +110,17 @@ class _TrackSelector:
         return max(0.0, self._deadline - time.monotonic())
 
     def check_timeout(self) -> None:
-        if self._deadline is not None and time.monotonic() >= self._deadline:
+        if self._deadline is None or time.monotonic() < self._deadline:
+            return
+        if self._feedback_queue:
+            self._advance_feedback()
+        else:
             self._reset()
 
     def _reset(self) -> None:
         self._digits = ""
         self._deadline = None
+        self._feedback_queue = []
         self._panel_display.LeftLedSet(False)  # "Selections being made"
         # Resume showing the currently-playing track's number (and its
         # matching LED state) rather than going blank -- a
@@ -108,12 +156,16 @@ class Coordinator:
         self._current_track_text: str = ' ' * 4
         self._current_is_known_track: bool = False
 
-        on_selection_complete = kwargs.get('on_selection_complete', lambda entered: None)
+        on_selection_complete = kwargs.get('on_selection_complete', lambda entered: False)
         self._track_selector = _TrackSelector(
             panel_display=self._panelDisplay,
             on_selection_complete=on_selection_complete,
             get_idle_text=lambda: self._current_track_text,
             get_idle_right_led=lambda: self._current_is_known_track,
+            blink_count=kwargs.get('blink_count', 3),
+            blink_phase_s=kwargs.get('blink_phase_s', 0.25),
+            error_text=kwargs.get('error_text', "Err"),
+            error_duration_s=kwargs.get('error_duration_s', 2.0),
         )
 
         self._event_queue: "queue.Queue[Callable[[], None]]" = queue.Queue()
