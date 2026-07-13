@@ -249,4 +249,4 @@ class Coordinator:
         self._panelDisplay.LeftLedSet(x == 1)
         if not self._track_selector.is_active():
             self._panelDisplay.RightLedSet(x == 0)
-        self._panelDisplay.WriteToThreeDigitDisplay(str(self._updateCount))
+        self._panelDisplay.WriteToThreeDigitDisplay(str(self._updateCount).rjust(3))
