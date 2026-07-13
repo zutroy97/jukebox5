@@ -16,19 +16,21 @@ import time
 
 DEFAULT_DEVICE = "/dev/jukebox_panel_bin"
 
-# Mirrors jukeboxPanelModule/jukebox_panel.c's raw_to_key() table exactly.
+# Matches src/panel/jukebox_panel_linux_binary.py's remapped table: digit
+# labels 0<=>5, 1<=>6, 2<=>7, 3<=>8, 4<=>9 (R/P unchanged) relative to
+# jukeboxPanelModule/jukebox_panel.c's raw_to_key().
 SIGNATURES = {
     0x7dff: 'P',
-    0xfddf: '1',
-    0xfcff: '2',
-    0xfdf7: '3',
-    0xfdfc: '4',
-    0xedff: '5',
-    0xfdef: '6',
-    0xfd3f: '7',
-    0xf5ff: '8',
-    0xfdfb: '9',
-    0xddff: '0',
+    0xfddf: '6',
+    0xfcff: '7',
+    0xfdf7: '8',
+    0xfdfc: '9',
+    0xedff: '0',
+    0xfdef: '1',
+    0xfd3f: '2',
+    0xf5ff: '3',
+    0xfdfb: '4',
+    0xddff: '5',
     0xbdff: 'R',
 }
 
