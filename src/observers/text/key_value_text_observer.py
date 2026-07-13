@@ -173,6 +173,18 @@ class KeyValueTextObserver(ObserverBase):
 
     def draw(self) -> None:
         if self._kv_state == _State.IDLE:
+            # Still drive the sub-drivers even with nothing new to show:
+            # next_wakeup() below queries them unconditionally (it has to,
+            # e.g. so a message added while idle can wake the rotation
+            # back up), so a driver left mid-animation here -- most
+            # notably a clear animation that didn't finish before this
+            # observer went idle -- would report "wake immediately"
+            # forever with nothing ever calling draw() to let it actually
+            # finish, busy-looping the coordinator thread. Each driver's
+            # own draw() already no-ops instantly once truly idle, so this
+            # costs nothing once settled.
+            self._key_driver.draw()
+            self._value_driver.draw()
             return
 
         if self._kv_state == _State.PAUSING:
