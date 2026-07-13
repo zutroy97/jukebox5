@@ -36,7 +36,8 @@ def build_panel(panel_config: PanelConfig, onButtonPress):
 
     if panel_config.name == "Raspberry Pi GPIO Linux Binary Driver":
         device = panel_config.options["device"]
-        return JukeboxPanelLinuxBinaryModule(device=device, onButtonPress=onButtonPress)
+        reveal_tick_s = float(panel_config.options.get("reveal_tick_s", 0.1))
+        return JukeboxPanelLinuxBinaryModule(device=device, reveal_tick_s=reveal_tick_s, onButtonPress=onButtonPress)
 
     raise ValueError(
         f"Unsupported jukeboxPanel driver {panel_config.name!r} in config.ini "

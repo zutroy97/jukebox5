@@ -34,7 +34,7 @@ class JukeboxPanelLinuxAsciiModule(JukeboxPanelInputBase, JukeboxPanelOutputBase
 
     # --- JukeboxPanelOutputBase ---
 
-    def WriteToThreeDigitDisplay(self, message: str):
+    def WriteToThreeDigitDisplay(self, message: str, animated: bool = True):
         self._write('w3 ' + message)
 
     def WriteNumberToThreeDigitDisplay(self, num: int):
@@ -43,7 +43,7 @@ class JukeboxPanelLinuxAsciiModule(JukeboxPanelInputBase, JukeboxPanelOutputBase
     def ClearThreeDigitDisplay(self):
         self.WriteToThreeDigitDisplay('   ')
 
-    def WriteToFourDigitDisplay(self, message: str):
+    def WriteToFourDigitDisplay(self, message: str, animated: bool = True):
         self._write('w4 ' + message)
 
     def WriteNumberToFourDigitDisplay(self, num: int):

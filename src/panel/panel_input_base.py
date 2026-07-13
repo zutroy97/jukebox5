@@ -20,20 +20,26 @@ class JukeboxPanelOutputBase(ABC):
         super().__init__()
         self._logger = logging.getLogger(self.__class__.__name__)
 
+    # animated: hint that a driver capable of raw segment control may play a
+    # segment-by-segment reveal for this write rather than showing it
+    # instantly. Callers set it False for writes where timing must stay
+    # exact (e.g. a blink sequence) or that repeat fast enough that
+    # animating each one would look wrong (e.g. live keypad echo). Drivers
+    # without segment-level control ignore it.
     @abstractmethod
-    def WriteToThreeDigitDisplay(self, message: str): pass
+    def WriteToThreeDigitDisplay(self, message: str, animated: bool = True): pass
 
     @abstractmethod
-    def WriteNumberToThreeDigitDisplay(self, num: int): pass    
+    def WriteNumberToThreeDigitDisplay(self, num: int): pass
 
     @abstractmethod
-    def WriteNumberToFourDigitDisplay(self, num: int): pass    
+    def WriteNumberToFourDigitDisplay(self, num: int): pass
 
     @abstractmethod
     def ClearThreeDigitDisplay(self): pass
 
     @abstractmethod
-    def WriteToFourDigitDisplay(self, message): pass
+    def WriteToFourDigitDisplay(self, message, animated: bool = True): pass
 
     @abstractmethod
     def ClearFourDigitDisplay(self): pass
@@ -80,16 +86,16 @@ class JukeboxPanelArduinoSerial(JukeboxPanelInputBase, JukeboxPanelOutputBase):
         self._threadReadLoop = threading.Thread(target=self._read_from_port_loop, daemon=True)
         self._threadReadLoop.start()
 
-    def WriteToThreeDigitDisplay(self, message: str):
+    def WriteToThreeDigitDisplay(self, message: str, animated: bool = True):
         self._write('w3 ' + message)
 
     def WriteNumberToThreeDigitDisplay(self, num: int):
-        self._write('w3 ' + str(num).rjust(3))        
+        self._write('w3 ' + str(num).rjust(3))
 
     def ClearThreeDigitDisplay(self):
         self.WriteToThreeDigitDisplay('   ')
 
-    def WriteToFourDigitDisplay(self, message: str):
+    def WriteToFourDigitDisplay(self, message: str, animated: bool = True):
         self._write('w4 ' + message)
 
     def WriteNumberToFourDigitDisplay(self, num: int):

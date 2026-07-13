@@ -80,7 +80,10 @@ class _TrackSelector:
             self._panel_display.RightLedSet(False)  # "Selection Playing"
         self._digits += key
         self._deadline = time.monotonic() + self.SELECTION_TIMEOUT_S
-        self._panel_display.WriteToFourDigitDisplay(self._digits.ljust(4))
+        # Not animated: this fires once per keystroke, faster than a
+        # segment reveal could complete -- an animated driver would just
+        # show a perpetually-interrupted reveal instead of crisp echo.
+        self._panel_display.WriteToFourDigitDisplay(self._digits.ljust(4), animated=False)
 
         if len(self._digits) < self.DIGIT_COUNT:
             return
@@ -101,7 +104,10 @@ class _TrackSelector:
 
     def _advance_feedback(self) -> None:
         duration, text = self._feedback_queue.pop(0)
-        self._panel_display.WriteToFourDigitDisplay(text if text is not None else ' ' * 4)
+        # Not animated: the blink/error phases have exact, short timing
+        # (as fast as blink_phase_s) that a segment reveal would blow
+        # straight through, turning a crisp blink into a smear.
+        self._panel_display.WriteToFourDigitDisplay(text if text is not None else ' ' * 4, animated=False)
         self._deadline = time.monotonic() + duration
 
     def next_wakeup(self) -> Optional[float]:
