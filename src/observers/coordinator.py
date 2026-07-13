@@ -18,9 +18,17 @@ class _TrackSelector:
     DIGIT_COUNT: int = 3
     SELECTION_TIMEOUT_S: float = 10.0
 
-    def __init__(self, panel_display: JukeboxPanelOutputBase, on_selection_complete: Callable[[str], None]) -> None:
+    def __init__(
+        self,
+        panel_display: JukeboxPanelOutputBase,
+        on_selection_complete: Callable[[str], None],
+        get_idle_text: Callable[[], str],
+        get_idle_right_led: Callable[[], bool],
+    ) -> None:
         self._panel_display = panel_display
         self._on_selection_complete = on_selection_complete
+        self._get_idle_text = get_idle_text
+        self._get_idle_right_led = get_idle_right_led
         self._digits: str = ""
         self._deadline: Optional[float] = None
 
@@ -35,7 +43,13 @@ class _TrackSelector:
             return
 
         if not self._digits:
-            self._panel_display.RightLedSet(True)
+            # The display can only show one thing at a time -- current
+            # selection or selection-in-progress -- so the two LEDs are
+            # mutually exclusive: entering a selection means the display
+            # is no longer showing the current selection, so that LED
+            # goes off for the duration.
+            self._panel_display.LeftLedSet(True)  # "Selections being made"
+            self._panel_display.RightLedSet(False)  # "Selection Playing"
         self._digits += key
         self._deadline = time.monotonic() + self.SELECTION_TIMEOUT_S
         self._panel_display.WriteToFourDigitDisplay(self._digits.ljust(4))
@@ -59,8 +73,15 @@ class _TrackSelector:
     def _reset(self) -> None:
         self._digits = ""
         self._deadline = None
-        self._panel_display.RightLedSet(False)
-        self._panel_display.WriteToFourDigitDisplay(' ' * 4)
+        self._panel_display.LeftLedSet(False)  # "Selections being made"
+        # Resume showing the currently-playing track's number (and its
+        # matching LED state) rather than going blank -- a
+        # completed/cancelled/timed-out selection doesn't take effect until
+        # the queued track actually starts playing (which only happens
+        # later, once shairport-sync reports the track_id change over
+        # MQTT), so the old number/state is still accurate here.
+        self._panel_display.WriteToFourDigitDisplay(self._get_idle_text())
+        self._panel_display.RightLedSet(self._get_idle_right_led())  # "Selection Playing"
 
 
 class Coordinator:
@@ -84,9 +105,16 @@ class Coordinator:
         self._panelButton: JukeboxPanelInputBase = kwargs['panelButtons']
         self._panelDisplay: JukeboxPanelOutputBase = kwargs['panelDisplay']
         self._updateCount: int = 0
+        self._current_track_text: str = ' ' * 4
+        self._current_is_known_track: bool = False
 
         on_selection_complete = kwargs.get('on_selection_complete', lambda entered: None)
-        self._track_selector = _TrackSelector(panel_display=self._panelDisplay, on_selection_complete=on_selection_complete)
+        self._track_selector = _TrackSelector(
+            panel_display=self._panelDisplay,
+            on_selection_complete=on_selection_complete,
+            get_idle_text=lambda: self._current_track_text,
+            get_idle_right_led=lambda: self._current_is_known_track,
+        )
 
         self._event_queue: "queue.Queue[Callable[[], None]]" = queue.Queue()
 
@@ -154,9 +182,25 @@ class Coordinator:
         No-op if the message is not present."""
         self._enqueue(lambda: self._apply_message(title, text=None, ttl_s=0, display_s=0))
 
-    def display_track_number(self, text: str) -> None:
-        """Write a value to the four-digit panel display."""
-        self._enqueue(lambda: self._panelDisplay.WriteToFourDigitDisplay(text))
+    def display_track_number(self, text: str, is_known_track: bool) -> None:
+        """Write a value to the four-digit panel display, and remember it
+        as the value _TrackSelector._reset() restores once digit entry
+        exits (see get_idle_text above). is_known_track drives the right
+        LED ("Selection Playing"): on exactly when the currently-playing
+        track was actually found in the playlist (i.e. `text` is a real
+        index rather than the "unknown track" placeholder)."""
+        self._enqueue(lambda: self._apply_track_number(text, is_known_track))
+
+    def _apply_track_number(self, text: str, is_known_track: bool) -> None:
+        self._current_track_text = text
+        self._current_is_known_track = is_known_track
+        # Cache unconditionally so _reset() picks up the right value once
+        # entry ends, but don't touch the display/LED live while the user
+        # is mid-entry -- a track actually changing at that moment
+        # shouldn't clobber the digits they're typing.
+        if not self._track_selector.is_active():
+            self._panelDisplay.WriteToFourDigitDisplay(text)
+            self._panelDisplay.RightLedSet(is_known_track)
 
     def on_button_press(self, key: str) -> None:
         """Feed a raw panel button press ('0'-'9', 'R', 'P') into track selection."""
@@ -245,8 +289,4 @@ class Coordinator:
                 observer.draw()
 
     def updateJukeboxDisplay(self) -> None:
-        x = self._updateCount % 2
-        self._panelDisplay.LeftLedSet(x == 1)
-        if not self._track_selector.is_active():
-            self._panelDisplay.RightLedSet(x == 0)
         self._panelDisplay.WriteToThreeDigitDisplay(str(self._updateCount).rjust(3))

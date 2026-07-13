@@ -111,7 +111,10 @@ def main(config_path=None):
                 track = playlist.get_by_persistent_id(track_id)
             except ValueError:
                 track = None
-        coordinator.display_track_number(str(track.index + TRACK_INDEX_OFFSET).rjust(4) if track is not None else '----')
+        coordinator.display_track_number(
+            str(track.index + TRACK_INDEX_OFFSET).rjust(4) if track is not None else '----',
+            is_known_track=track is not None,
+        )
 
     # exercise(coordinator)
     mqtt_config = config.mqtt()
