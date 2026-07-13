@@ -1,1 +1,2 @@
 SUBSYSTEM=="misc", KERNEL=="jukebox_panel", GROUP="gpio", MODE="0660"
+SUBSYSTEM=="misc", KERNEL=="jukebox_panel_bin", GROUP="gpio", MODE="0660"

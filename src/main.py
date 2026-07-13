@@ -10,6 +10,7 @@ from config import Config, PanelConfig
 from observers import UpdateEventType, Coordinator, SingleTextLineAnimatedObserver, KeyValueTextObserver
 from panel.panel_input_base import JukeboxPanelArduinoSerial
 from panel.jukebox_panel_linux_ascii import JukeboxPanelLinuxAsciiModule
+from panel.jukebox_panel_linux_binary import JukeboxPanelLinuxBinaryModule
 from playlist import Playlist
 from shairport_mqtt import ShairportSyncMQTTSource
 
@@ -33,9 +34,14 @@ def build_panel(panel_config: PanelConfig, onButtonPress):
         device = panel_config.options["device"]
         return JukeboxPanelLinuxAsciiModule(device=device, onButtonPress=onButtonPress)
 
+    if panel_config.name == "Raspberry Pi GPIO Linux Binary Driver":
+        device = panel_config.options["device"]
+        return JukeboxPanelLinuxBinaryModule(device=device, onButtonPress=onButtonPress)
+
     raise ValueError(
         f"Unsupported jukeboxPanel driver {panel_config.name!r} in config.ini "
-        "(only 'Serial' and 'Raspberry Pi GPIO Linux Driver' are currently implemented)"
+        "(only 'Serial', 'Raspberry Pi GPIO Linux Driver', and "
+        "'Raspberry Pi GPIO Linux Binary Driver' are currently implemented)"
     )
 
 
@@ -105,7 +111,10 @@ def main(config_path=None):
                 track = playlist.get_by_persistent_id(track_id)
             except ValueError:
                 track = None
-        coordinator.display_track_number(str(track.index + TRACK_INDEX_OFFSET).rjust(4) if track is not None else '----')
+        coordinator.display_track_number(
+            str(track.index + TRACK_INDEX_OFFSET).rjust(4) if track is not None else '----',
+            is_known_track=track is not None,
+        )
 
     # exercise(coordinator)
     mqtt_config = config.mqtt()
