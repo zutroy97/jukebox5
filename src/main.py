@@ -4,8 +4,11 @@ import threading
 import logging
 
 import drivers as ldisp
-from animations import RandomTypeWriter
 from animations.abstract_clear_animator import ClearTextBlankLeftToRightAnimator
+from animations.abstract_character_reveal_animator import (
+    CharacterRevealImmediatelyAnimator,
+    SegmentByCharacterRevealAnimator,
+)
 from config import Config, PanelConfig
 from observers import UpdateEventType, Coordinator, SingleTextLineAnimatedObserver, KeyValueTextObserver
 from panel.panel_input_base import JukeboxPanelArduinoSerial
@@ -46,6 +49,12 @@ def build_panel(panel_config: PanelConfig, onButtonPress):
     )
 
 
+_CHARACTER_REVEAL_ANIMATIONS = {
+    "immediate": CharacterRevealImmediatelyAnimator,
+    "segment": SegmentByCharacterRevealAnimator,
+}
+
+
 def apply_animation_config(observer, config: Config):
     animation_config = config.animation_for_width(observer.DisplayWidth)
     if animation_config.delay_between_characters_s is not None:
@@ -54,6 +63,17 @@ def apply_animation_config(observer, config: Config):
         observer.delay_after_line_finished_s = animation_config.delay_after_line_finished_s
     if animation_config.delay_after_animation_finished_s is not None:
         observer.delay_after_animation_finished_s = animation_config.delay_after_animation_finished_s
+
+    # Defaults to "segment" (SegmentByCharacterRevealAnimator) rather than
+    # the class's own instant default -- that's the animation actually
+    # wanted here; config.ini can opt individual displays back to
+    # "immediate" instead.
+    reveal_choice = animation_config.character_reveal_animation or "segment"
+    observer.CharacterRevealAnimation = _CHARACTER_REVEAL_ANIMATIONS[reveal_choice]()
+    if animation_config.delay_between_segments_s is not None:
+        reveal_animation = observer.CharacterRevealAnimation
+        if hasattr(reveal_animation, 'delay_between_segments_s'):
+            reveal_animation.delay_between_segments_s = animation_config.delay_between_segments_s
 
 
 def main(config_path=None):
@@ -104,9 +124,8 @@ def main(config_path=None):
     apply_animation_config(led_artist_observer, config)
 
     led_song_title_observer = SingleTextLineAnimatedObserver(driver=led1, event_type=UpdateEventType.SONG_TITLE)
-    apply_animation_config(led_song_title_observer, config)
-    led_song_title_observer.changeAnimation(RandomTypeWriter())
     led_song_title_observer.ClearDisplayAnimation = ClearTextBlankLeftToRightAnimator()
+    apply_animation_config(led_song_title_observer, config)
 
     kv_observer = KeyValueTextObserver(
         key_driver=led_artist_observer,

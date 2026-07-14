@@ -6,11 +6,19 @@ from typing import Optional
 DISPLAY_FIELDS = ("artist", "title", "album")
 
 
+CHARACTER_REVEAL_ANIMATIONS = ("immediate", "segment")
+
+
 @dataclass(frozen=True)
 class AnimationConfig:
     delay_between_characters_s: Optional[float] = None
     delay_after_line_finished_s: Optional[float] = None
     delay_after_animation_finished_s: Optional[float] = None
+    delay_between_segments_s: Optional[float] = None
+    # "immediate" (CharacterRevealImmediatelyAnimator, whole character at
+    # once) or "segment" (SegmentByCharacterRevealAnimator, one segment at
+    # a time). None means: caller's own default.
+    character_reveal_animation: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -68,10 +76,21 @@ class Config:
             return AnimationConfig()
 
         section = self._parser[section_name]
+        character_reveal_animation = section.get("character_reveal_animation", fallback=None)
+        if character_reveal_animation is not None:
+            character_reveal_animation = character_reveal_animation.strip().lower()
+            if character_reveal_animation not in CHARACTER_REVEAL_ANIMATIONS:
+                raise ValueError(
+                    f"[{section_name}] character_reveal_animation {character_reveal_animation!r} "
+                    f"is invalid; valid values are {CHARACTER_REVEAL_ANIMATIONS}"
+                )
+
         return AnimationConfig(
             delay_between_characters_s=section.getfloat("delay_between_characters_s", fallback=None),
             delay_after_line_finished_s=section.getfloat("delay_after_line_finished_s", fallback=None),
             delay_after_animation_finished_s=section.getfloat("delay_after_animation_finished_s", fallback=None),
+            delay_between_segments_s=section.getfloat("delay_between_segments_s", fallback=None),
+            character_reveal_animation=character_reveal_animation,
         )
 
     def panel(self) -> PanelConfig:
