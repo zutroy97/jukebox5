@@ -30,9 +30,18 @@ class ShairportSyncMQTTSource:
         broker_host: str = "localhost",
         broker_port: int = 1883,
         base_topic: str = "shairport-sync",
-        client_id: str = "jukebox",
+        client_id: Optional[str] = None,
     ) -> None:
         self._logger = logging.getLogger(__class__.__name__)
+        if client_id is None:
+            # A fixed client_id here means: if an old process's connection
+            # hasn't fully torn down (e.g. we restarted main.py in quick
+            # succession) before a new one connects, the MQTT spec requires
+            # the broker to kick one of them -- observed as a real, if
+            # unconfirmed, contributing risk during this session's repeated
+            # restarts. Append monotonic time so every process instance
+            # gets a distinct client_id.
+            client_id = f"jukebox-{time.monotonic()}"
         self._on_song_changed = on_song_changed
         self._on_play_end = on_play_end
         self._on_track_id_changed = on_track_id_changed
