@@ -83,12 +83,17 @@ class ShairportSyncMQTTSource:
 
     def queue_next(self, track_id: str) -> None:
         """Ask shairport-sync to queue a track next by publishing to <base_topic>/remote."""
-        payload = f"queue_next {track_id}"
-        result = self._client.publish(self._topic_remote, payload)
+        self.send_remote_command(f"queue_next {track_id}")
+
+    def send_remote_command(self, command: str) -> None:
+        """Publish a plain shairport-sync remote command (e.g. "playpause",
+        "nextitem", "previtem" -- see shairport-sync's own documented
+        remote-control vocabulary) to <base_topic>/remote."""
+        result = self._client.publish(self._topic_remote, command)
         if result.rc != mqtt.MQTT_ERR_SUCCESS:
-            self._logger.warning("Failed to publish %r to %s (rc=%d)", payload, self._topic_remote, result.rc)
+            self._logger.warning("Failed to publish %r to %s (rc=%d)", command, self._topic_remote, result.rc)
         else:
-            self._logger.info("Published %r to %s", payload, self._topic_remote)
+            self._logger.info("Published %r to %s", command, self._topic_remote)
 
     def stop(self) -> None:
         self._running = False

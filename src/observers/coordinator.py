@@ -9,20 +9,35 @@ from .observer_base import ObserverBase, UpdateEventType
 
 
 class _TrackSelector:
-    """Accumulates digits typed on the panel into a 3-digit track selection.
+    """Accumulates digits (or a 'P'-prefixed command) typed on the panel.
 
     Only ever touched from the Coordinator's own thread (via `_enqueue` and
     the `_loop` polling below), so it needs no locking of its own.
 
-    Once 3 digits are entered, on_selection_complete(entered) is called and
-    its bool return value (True = a real match -- currently a playlist
-    track, but the same signal works for any future non-playlist command
-    too) selects one of two feedback sequences before the display reverts
-    to whatever it was showing before entry started:
+    The first keypress after idle decides the mode:
+      - a digit  starts a 3-digit track selection (SELECTION_TIMEOUT_S
+                 between keystrokes)
+      - 'P'      starts command entry (COMMAND_TIMEOUT_S between
+                 keystrokes, shorter -- commands are meant to be entered
+                 in one quick burst): subsequent keys are matched against
+                 COMMANDS as they arrive. An exact match fires
+                 immediately (on_command(COMMANDS[entered]) and the valid
+                 feedback below) without waiting for the timeout; a
+                 sequence no full command starts with is invalid
+                 immediately, same idea.
+
+    Track selection calls on_selection_complete(entered) once 3 digits are
+    in, and its bool return value (True = a real match -- currently a
+    playlist track) selects one of two feedback sequences before the
+    display reverts to whatever it was showing before entry started:
       - valid:   the entered code blinks blink_count times (blink_phase_s
                  per on/off phase)
       - invalid: error_text is shown for error_duration_s
-    Both are driven by the same `_deadline`/`_feedback_queue` machinery
+    Command entry uses the same feedback -- valid always for an exact
+    COMMANDS match (nothing else calls on_command), invalid for an
+    unmatchable sequence.
+
+    Feedback is driven by the same `_deadline`/`_feedback_queue` machinery
     entry-timeout uses, just repurposed once entry completes -- see
     check_timeout(). Timing/text defaults match config.py's
     TrackSelectionFeedbackConfig; see Coordinator for where config values
@@ -31,11 +46,21 @@ class _TrackSelector:
 
     DIGIT_COUNT: int = 3
     SELECTION_TIMEOUT_S: float = 10.0
+    COMMAND_TIMEOUT_S: float = 2.0
+
+    # Entered sequence (including the leading 'P') -> shairport-sync remote
+    # command name (see ShairportSyncMQTTSource.send_remote_command).
+    COMMANDS: dict[str, str] = {
+        "PP": "playpause",
+        "P111": "previtem",
+        "P666": "nextitem",
+    }
 
     def __init__(
         self,
         panel_display: JukeboxPanelOutputBase,
         on_selection_complete: Callable[[str], bool],
+        on_command: Callable[[str], None],
         get_idle_text: Callable[[], str],
         get_idle_right_led: Callable[[], bool],
         blink_count: int = 3,
@@ -45,6 +70,7 @@ class _TrackSelector:
     ) -> None:
         self._panel_display = panel_display
         self._on_selection_complete = on_selection_complete
+        self._on_command = on_command
         self._get_idle_text = get_idle_text
         self._get_idle_right_led = get_idle_right_led
         self._blink_count = blink_count
@@ -52,6 +78,7 @@ class _TrackSelector:
         self._error_text = error_text
         self._error_duration_s = error_duration_s
         self._digits: str = ""
+        self._mode: Optional[str] = None  # 'track' | 'command', while entering
         self._deadline: Optional[float] = None
         # Queue of (duration_s, text) phases still to show for the
         # post-entry blink/error feedback sequence; None text means blank.
@@ -67,32 +94,63 @@ class _TrackSelector:
         if key == 'R':
             self._reset()
             return
-        if key not in "0123456789":
-            return
 
-        if not self._digits:
+        if self._mode is None:
+            if key == 'P':
+                self._mode = 'command'
+            elif key in "0123456789":
+                self._mode = 'track'
+            else:
+                return
             # The display can only show one thing at a time -- current
-            # selection or selection-in-progress -- so the two LEDs are
-            # mutually exclusive: entering a selection means the display
+            # selection or entry-in-progress -- so the two LEDs are
+            # mutually exclusive: entering something means the display
             # is no longer showing the current selection, so that LED
             # goes off for the duration.
             self._panel_display.LeftLedSet(True)  # "Selections being made"
             self._panel_display.RightLedSet(False)  # "Selection Playing"
+        elif self._mode == 'command':
+            if key != 'P' and key not in "0123456789":
+                return
+        else:  # 'track'
+            if key not in "0123456789":
+                return
+
         self._digits += key
-        self._deadline = time.monotonic() + self.SELECTION_TIMEOUT_S
+        timeout = self.COMMAND_TIMEOUT_S if self._mode == 'command' else self.SELECTION_TIMEOUT_S
+        self._deadline = time.monotonic() + timeout
         # Not animated: this fires once per keystroke, faster than a
         # segment reveal could complete -- an animated driver would just
         # show a perpetually-interrupted reveal instead of crisp echo.
         self._panel_display.WriteToFourDigitDisplay(self._digits.ljust(4), animated=False)
 
-        if len(self._digits) < self.DIGIT_COUNT:
+        if self._mode == 'track':
+            if len(self._digits) < self.DIGIT_COUNT:
+                return
+            entered = self._digits
+            self._finish_entry()
+            is_valid = self._on_selection_complete(entered)
+            self._start_feedback(entered, is_valid)
             return
 
-        entered = self._digits
+        # 'command' mode: fire as soon as there's an exact match, bail out
+        # as soon as no command could possibly match what's typed so far --
+        # no need to wait out the timeout in either case.
+        command = self.COMMANDS.get(self._digits)
+        if command is not None:
+            entered = self._digits
+            self._finish_entry()
+            self._on_command(command)
+            self._start_feedback(entered, True)
+        elif not any(c.startswith(self._digits) for c in self.COMMANDS):
+            entered = self._digits
+            self._finish_entry()
+            self._start_feedback(entered, False)
+
+    def _finish_entry(self) -> None:
         self._digits = ""
+        self._mode = None
         self._panel_display.LeftLedSet(False)  # entry is over, made or not
-        is_valid = self._on_selection_complete(entered)
-        self._start_feedback(entered, is_valid)
 
     def _start_feedback(self, entered: str, is_valid: bool) -> None:
         if is_valid:
@@ -125,6 +183,7 @@ class _TrackSelector:
 
     def _reset(self) -> None:
         self._digits = ""
+        self._mode = None
         self._deadline = None
         self._feedback_queue = []
         self._panel_display.LeftLedSet(False)  # "Selections being made"
@@ -163,9 +222,11 @@ class Coordinator:
         self._current_is_known_track: bool = False
 
         on_selection_complete = kwargs.get('on_selection_complete', lambda entered: False)
+        on_command = kwargs.get('on_command', lambda command: None)
         self._track_selector = _TrackSelector(
             panel_display=self._panelDisplay,
             on_selection_complete=on_selection_complete,
+            on_command=on_command,
             get_idle_text=lambda: self._current_track_text,
             get_idle_right_led=lambda: self._current_is_known_track,
             blink_count=kwargs.get('blink_count', 3),
