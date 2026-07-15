@@ -118,13 +118,14 @@ class ObserverBase(ABC):
             self._message_rotation.append(message)
 
         self._logger.debug("Message %r in rotation (ttl=%.0fs, display=%.0fs)", title, ttl_s, display_s)
-        self.on_messages_changed()
+        self.on_messages_changed(title=title, text=text)
 
-    def on_messages_changed(self) -> None:
+    def on_messages_changed(self, title: Optional[str] = None, text: Optional[str] = None) -> None:
         """Called when a message is added or updated (not on removal or
-        expiry). Subclasses can override to react immediately — e.g. to
-        start showing a message even though nothing else is playing —
-        instead of waiting for the next scheduled draw."""
+        expiry), with the title/text that changed. Subclasses can override
+        to react immediately — e.g. to interrupt whatever is currently
+        showing so an urgent status message is seen right away, instead of
+        waiting for it to reach its turn in the rotation."""
         pass
 
     # ------------------------------------------------------------------

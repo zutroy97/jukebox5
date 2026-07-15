@@ -27,6 +27,8 @@ class ShairportSyncMQTTSource:
         on_song_changed: Callable[[str, str, str], None],
         on_play_end: Callable[[], None],
         on_track_id_changed: Optional[Callable[[str], None]] = None,
+        on_connection_lost: Optional[Callable[[], None]] = None,
+        on_connection_established: Optional[Callable[[], None]] = None,
         broker_host: str = "localhost",
         broker_port: int = 1883,
         base_topic: str = "shairport-sync",
@@ -45,6 +47,8 @@ class ShairportSyncMQTTSource:
         self._on_song_changed = on_song_changed
         self._on_play_end = on_play_end
         self._on_track_id_changed = on_track_id_changed
+        self._on_connection_lost = on_connection_lost
+        self._on_connection_established = on_connection_established
         self._broker_host = broker_host
         self._broker_port = broker_port
         self._base_topic = base_topic.rstrip("/")
@@ -130,9 +134,13 @@ class ShairportSyncMQTTSource:
             (self._topic_track_id, 0),
             (self._topic_play_end, 0),
         ])
+        if self._on_connection_established:
+            self._on_connection_established()
 
     def _on_disconnect(self, client, userdata, rc):
         self._logger.warning("MQTT disconnected rc=%d", rc)
+        if self._on_connection_lost:
+            self._on_connection_lost()
 
     def _try_fire(self, artist: Optional[str], title: Optional[str], album: Optional[str]) -> bool:
         """Fire on_song_changed if artist and title are both present.

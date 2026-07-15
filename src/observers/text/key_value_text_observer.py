@@ -146,11 +146,21 @@ class KeyValueTextObserver(ObserverBase):
     def timeout_expired(self) -> None:
         self._reset_song_and_resume_messages()
 
-    def on_messages_changed(self) -> None:
-        # A message was added/updated while nothing was playing — kick the
-        # rotation out of IDLE so it shows on the next draw() instead of
-        # waiting for a song to start.
-        if self._kv_state == _State.IDLE:
+    def on_messages_changed(self, title: Optional[str] = None, text: Optional[str] = None) -> None:
+        # Interrupt whatever's currently showing (song field or another
+        # message) and show the changed message right away. Without this,
+        # a message added while a song is actively cycling just gets
+        # appended to _message_rotation and has to wait for the current
+        # cycle to fully drain before it gets a turn — which can easily
+        # take longer than a short outage, so an "Attempt Reconnect"
+        # status message could come and go unseen. Mirrors how
+        # updated_song_title() already interrupts for a new song.
+        self._cycle = [pair for pair in self._build_cycle() if pair != (title, text)]
+        if title is not None and text is not None:
+            self._show_pair(title, text)
+        elif self._cycle:
+            self._show_pair(*self._cycle.pop(0))
+        else:
             self._go_idle_or_resume_messages()
 
     # ------------------------------------------------------------------

@@ -152,10 +152,18 @@ def main(config_path=None):
 
     # exercise(coordinator)
     mqtt_config = config.mqtt()
+    def onConnectionLost():
+        coordinator.add_message("Problem", "MQTT Lost. Attempting Reconnect.", ttl_s=0, display_s=5)
+
+    def onConnectionEstablished():
+        coordinator.remove_message("Problem")
+
     source = ShairportSyncMQTTSource(
         on_song_changed=coordinator.update_song_info,
         on_play_end=coordinator.play_ended,
         on_track_id_changed=onTrackIdChanged,
+        on_connection_lost=onConnectionLost,
+        on_connection_established=onConnectionEstablished,
         broker_host=mqtt_config.broker_host,
         broker_port=mqtt_config.broker_port,
         base_topic=mqtt_config.base_topic,
