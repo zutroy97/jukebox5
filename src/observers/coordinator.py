@@ -220,6 +220,10 @@ class Coordinator:
         self._updateCount: int = 0
         self._current_track_text: str = ' ' * 4
         self._current_is_known_track: bool = False
+        self._is_paused: bool = False
+        self._flash_on: bool = True
+        self._flash_interval_s: float = kwargs.get('flash_interval_s', 0.75)
+        self._flash_deadline: Optional[float] = None
 
         on_selection_complete = kwargs.get('on_selection_complete', lambda entered: False)
         on_command = kwargs.get('on_command', lambda command: None)
@@ -318,8 +322,59 @@ class Coordinator:
         # is mid-entry -- a track actually changing at that moment
         # shouldn't clobber the digits they're typing.
         if not self._track_selector.is_active():
-            self._panelDisplay.WriteToFourDigitDisplay(text)
             self._panelDisplay.RightLedSet(is_known_track)
+            self._refresh_track_display()
+
+    def clear_for_inactive(self) -> None:
+        """Notify the coordinator that shairport-sync reports active_end
+        (no session, idle past active_state_timeout) -- clear the panel's
+        digit displays and show a static 'Playback' / 'stopped' status on
+        the label displays instead of the last-known artist/title."""
+        self._enqueue(self._apply_active_end)
+
+    def _apply_active_end(self) -> None:
+        self._apply_pause_state(False)
+        self._current_track_text = ' ' * 4
+        self._current_is_known_track = False
+        if not self._track_selector.is_active():
+            self._panelDisplay.Clear()
+            self._panelDisplay.RightLedSet(False)
+        self._apply_message("Playback", "stopped", ttl_s=0, display_s=5)
+
+    def set_playback_paused(self, is_paused: bool) -> None:
+        """Notify the coordinator that playback has paused/resumed. While
+        paused, the 4-digit track-number display flashes on/off
+        (flash_interval_s per phase) instead of showing the number
+        steadily."""
+        self._enqueue(lambda: self._apply_pause_state(is_paused))
+
+    def _apply_pause_state(self, is_paused: bool) -> None:
+        self._is_paused = is_paused
+        self._flash_on = True
+        self._flash_deadline = time.monotonic() + self._flash_interval_s if is_paused else None
+        self._refresh_track_display()
+
+    def _refresh_track_display(self) -> None:
+        # A selection-in-progress owns the 4-digit display -- don't clobber
+        # the digits the user is typing.
+        if self._track_selector.is_active():
+            return
+        if self._is_paused:
+            # Not animated: flash phases need exact, crisp on/off timing --
+            # a segment reveal would eat into flash_interval_s and blur the
+            # toggle into a slow re-materialize instead of a crisp blink
+            # (same reasoning as _TrackSelector's blink/error feedback).
+            text = self._current_track_text if self._flash_on else ' ' * 4
+            self._panelDisplay.WriteToFourDigitDisplay(text, animated=False)
+        else:
+            self._panelDisplay.WriteToFourDigitDisplay(self._current_track_text)
+
+    def _check_flash_timeout(self) -> None:
+        if self._flash_deadline is None or time.monotonic() < self._flash_deadline:
+            return
+        self._flash_on = not self._flash_on
+        self._flash_deadline = time.monotonic() + self._flash_interval_s
+        self._refresh_track_display()
 
     def on_button_press(self, key: str) -> None:
         """Feed a raw panel button press ('0'-'9', 'R', 'P') into track selection."""
@@ -335,6 +390,10 @@ class Coordinator:
     # ------------------------------------------------------------------
 
     def _apply_song_update(self, artist: str, song_title: str, album: str = "") -> None:
+        # Real playback has resumed -- drop any lingering "Playback" /
+        # "stopped" status from clear_for_inactive() so it doesn't keep
+        # reappearing in the message rotation alongside the actual song.
+        self._apply_message("Playback", text=None, ttl_s=0, display_s=0)
         self._notify_all(UpdateEventType.ARTIST, artist)
         if album and album.strip():
             self._notify_all(UpdateEventType.ALBUM, album.strip())
@@ -346,6 +405,8 @@ class Coordinator:
     def _apply_play_ended(self) -> None:
         self._notify_all(UpdateEventType.STATE_PLAYBACK_STOPPED, '')
         self._notify_all(UpdateEventType.NO_EVENT_RECEIVED_TIMEOUT, '')
+        # Playback has stopped entirely (not just paused) -- stop flashing.
+        self._apply_pause_state(False)
 
     def _apply_message(self, title: str, text: str | None, ttl_s: float, display_s: float) -> None:
         for observer in self._snapshot_observers():
@@ -377,6 +438,9 @@ class Coordinator:
         if selection_wakeup is not None:
             deadlines.append(selection_wakeup)
 
+        if self._flash_deadline is not None:
+            deadlines.append(max(0.0, self._flash_deadline - time.monotonic()))
+
         for observer in self._snapshot_observers():
             w = observer.next_wakeup()
             if w is not None:
@@ -403,6 +467,7 @@ class Coordinator:
                 self._timeout = time.monotonic() + Coordinator.TimeoutLimitInSeconds
 
             self._track_selector.check_timeout()
+            self._check_flash_timeout()
 
             for observer in self._snapshot_observers():
                 observer.draw()

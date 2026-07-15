@@ -105,6 +105,7 @@ def main(config_path=None):
 
     panel = build_panel(config.panel(), onPanelButtonPress)
     feedback_config = config.track_selection_feedback()
+    pause_flash_config = config.playback_pause_flash()
     coordinator = Coordinator(
         panelButtons=panel,
         panelDisplay=panel,
@@ -114,6 +115,7 @@ def main(config_path=None):
         blink_phase_s=feedback_config.blink_phase_s,
         error_text=feedback_config.error_text,
         error_duration_s=feedback_config.error_duration_s,
+        flash_interval_s=pause_flash_config.flash_interval_s,
     )
     coordinator_holder.append(coordinator)
 
@@ -158,12 +160,24 @@ def main(config_path=None):
     def onConnectionEstablished():
         coordinator.remove_message("Problem")
 
+    def onPlaybackPaused():
+        coordinator.set_playback_paused(True)
+
+    def onPlaybackResumed():
+        coordinator.set_playback_paused(False)
+
+    def onActiveEnd():
+        coordinator.clear_for_inactive()
+
     source = ShairportSyncMQTTSource(
         on_song_changed=coordinator.update_song_info,
         on_play_end=coordinator.play_ended,
         on_track_id_changed=onTrackIdChanged,
         on_connection_lost=onConnectionLost,
         on_connection_established=onConnectionEstablished,
+        on_playback_paused=onPlaybackPaused,
+        on_playback_resumed=onPlaybackResumed,
+        on_active_end=onActiveEnd,
         broker_host=mqtt_config.broker_host,
         broker_port=mqtt_config.broker_port,
         base_topic=mqtt_config.base_topic,

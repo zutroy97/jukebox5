@@ -44,6 +44,12 @@ class TrackSelectionFeedbackConfig:
     error_duration_s: float = 2.0
 
 
+@dataclass(frozen=True)
+class PlaybackPauseFlashConfig:
+    """Flash timing for the 4-digit display while playback is paused."""
+    flash_interval_s: float = 0.75
+
+
 class Config:
     """Parses the jukebox's INI config file (defaults to src/config.ini).
 
@@ -60,6 +66,8 @@ class Config:
         what order.
       - `trackSelectionFeedback`: blink/error timing shown on the 4-digit
         display after a keypad track selection completes.
+      - `playbackPauseFlash`: flash timing for the 4-digit display while
+        playback is paused.
     """
 
     def __init__(self, path: Optional[str] = None) -> None:
@@ -125,6 +133,15 @@ class Config:
             blink_phase_s=section.getfloat("blink_phase_s", fallback=0.25),
             error_text=section.get("error_text", fallback="Err"),
             error_duration_s=section.getfloat("error_duration_s", fallback=2.0),
+        )
+
+    def playback_pause_flash(self) -> PlaybackPauseFlashConfig:
+        if "playbackPauseFlash" not in self._parser:
+            return PlaybackPauseFlashConfig()
+
+        section = self._parser["playbackPauseFlash"]
+        return PlaybackPauseFlashConfig(
+            flash_interval_s=section.getfloat("flash_interval_s", fallback=0.75),
         )
 
     def playlist_path(self) -> Optional[str]:

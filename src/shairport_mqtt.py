@@ -29,6 +29,9 @@ class ShairportSyncMQTTSource:
         on_track_id_changed: Optional[Callable[[str], None]] = None,
         on_connection_lost: Optional[Callable[[], None]] = None,
         on_connection_established: Optional[Callable[[], None]] = None,
+        on_playback_paused: Optional[Callable[[], None]] = None,
+        on_playback_resumed: Optional[Callable[[], None]] = None,
+        on_active_end: Optional[Callable[[], None]] = None,
         broker_host: str = "localhost",
         broker_port: int = 1883,
         base_topic: str = "shairport-sync",
@@ -49,6 +52,9 @@ class ShairportSyncMQTTSource:
         self._on_track_id_changed = on_track_id_changed
         self._on_connection_lost = on_connection_lost
         self._on_connection_established = on_connection_established
+        self._on_playback_paused = on_playback_paused
+        self._on_playback_resumed = on_playback_resumed
+        self._on_active_end = on_active_end
         self._broker_host = broker_host
         self._broker_port = broker_port
         self._base_topic = base_topic.rstrip("/")
@@ -66,6 +72,9 @@ class ShairportSyncMQTTSource:
         self._topic_album    = f"{self._base_topic}/album"
         self._topic_track_id = f"{self._base_topic}/track_id"
         self._topic_play_end = f"{self._base_topic}/play_end"
+        self._topic_play_flush  = f"{self._base_topic}/play_flush"
+        self._topic_play_resume = f"{self._base_topic}/play_resume"
+        self._topic_active_end  = f"{self._base_topic}/active_end"
         self._topic_remote   = f"{self._base_topic}/remote"
 
         try:
@@ -128,11 +137,14 @@ class ShairportSyncMQTTSource:
             return
         self._logger.info("MQTT connected")
         client.subscribe([
-            (self._topic_artist,   0),
-            (self._topic_title,    0),
-            (self._topic_album,    0),
-            (self._topic_track_id, 0),
-            (self._topic_play_end, 0),
+            (self._topic_artist,      0),
+            (self._topic_title,       0),
+            (self._topic_album,       0),
+            (self._topic_track_id,    0),
+            (self._topic_play_end,    0),
+            (self._topic_play_flush,  0),
+            (self._topic_play_resume, 0),
+            (self._topic_active_end,  0),
         ])
         if self._on_connection_established:
             self._on_connection_established()
@@ -174,6 +186,24 @@ class ShairportSyncMQTTSource:
                 self._reset_track()
                 self._track_id = None
             self._on_play_end()
+            return
+
+        if msg.topic == self._topic_play_flush:
+            self._logger.info("Playback paused")
+            if self._on_playback_paused:
+                self._on_playback_paused()
+            return
+
+        if msg.topic == self._topic_play_resume:
+            self._logger.info("Playback resumed")
+            if self._on_playback_resumed:
+                self._on_playback_resumed()
+            return
+
+        if msg.topic == self._topic_active_end:
+            self._logger.info("Active session ended")
+            if self._on_active_end:
+                self._on_active_end()
             return
 
         fire_artist = fire_title = fire_album = None
