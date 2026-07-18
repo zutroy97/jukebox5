@@ -31,21 +31,37 @@ Wires+--5--4--3--2--1--+
 
 ### Pin Mappings and Descriptions
 
-| Example Arduino Sketch PIN | 13 Pin # | 10 Pin # | Signal | Direction | Purpose |
-|-|----------|----------|--------|-----------|---------|
-|  | 1 | 6 | VDD1 | - | +5v power (Board 1) |
-| | 2 | 5 | GND | - | Ground |
-|  | 3 | X | N/C | - | Not connected |
-|  | 4 | X | N/C | - | Not connected |
-| 10 | 5 | 8 | `KEY_IN_0` | In | Keypad matrix sense line 0 |
-| 11 | 6 | 7 | `KEY_IN_1` | In | Keypad matrix sense line 1 |
-| 7 | 7 | 4 | `DISPLAY_4` (4-digit / `Z8`) | Out | Serial data for the 4-character display |
-|  | 8 | X | N/C | - | Not connected |
-| 8 | 9 | 3 | `DISPLAY_3` (3-digit / `Z3`) | Out | Serial data for the 3-character display |
-| 9 | 10 | 2 | `MATRIX_SELECT` | Out | High-order select line, shared/multiplexed with keypad scanning |
-| 2 | 11 | 1 | `CLOCK` | Out | Shared bit clock for the display shift registers |
-| 4 | 12 | 10 | `DISPLAY_ENABLE` | Out | Gates the shift-register output latch / display driver |
-|  | 13 | 9 | VDD2 | - | +5v power (Board 2) |
+The "Pi GPIO (BCM)" / "Pi Header Pin #" columns are the current Raspberry Pi
+side of the harness, via the TXS0108E level shifter described in
+[`jukeboxPanelModule/WIRING.md`](../jukeboxPanelModule/WIRING.md) and
+matching the `gpio_*` module params in `jukeboxPanelModule/jukebox_panel.c`
+(pin numbers are physical/board pin numbers on the 40-pin GPIO header, not
+BCM or wiringPi numbering).
+
+| Example Arduino Sketch PIN | 13 Pin # | 10 Pin # | Signal | Direction | Purpose | Pi GPIO (BCM) | Pi Header Pin # |
+|-|----------|----------|--------|-----------|---------|---------------|------------------|
+|  | 1 | 6 | VDD1 | - | +5v power (Board 1) | - | External 5V supply (level shifter VCCB) — not the Pi header, see `WIRING.md` |
+| | 2 | 5 | GND | - | Ground | - | Any GND pin (e.g. 9, 14, 20, 25, 30, 34, or 39) |
+|  | 3 | X | N/C | - | Not connected | - | - |
+|  | 4 | X | N/C | - | Not connected | - | - |
+| 10 | 5 | 8 | `KEY_IN_0` | In | Keypad matrix sense line 0 | GPIO25 | 22 |
+| 11 | 6 | 7 | `KEY_IN_1` | In | Keypad matrix sense line 1 | GPIO5 | 29 |
+| 7 | 7 | 4 | `DISPLAY_4` (4-digit / `Z8`) | Out | Serial data for the 4-character display | GPIO22 | 15 |
+|  | 8 | X | N/C | - | Not connected | - | - |
+| 8 | 9 | 3 | `DISPLAY_3` (3-digit / `Z3`) | Out | Serial data for the 3-character display | GPIO23 | 16 |
+| 9 | 10 | 2 | `MATRIX_SELECT` | Out | High-order select line, shared/multiplexed with keypad scanning | GPIO24 | 18 |
+| 2 | 11 | 1 | `CLOCK` | Out | Shared bit clock for the display shift registers | GPIO17 | 11 |
+| 4 | 12 | 10 | `DISPLAY_ENABLE` | Out | Gates the shift-register output latch / display driver | GPIO27 | 13 |
+|  | 13 | 9 | VDD2 | - | +5v power (Board 2) | - | External 5V supply (level shifter VCCB) — not the Pi header, see `WIRING.md` |
+
+The level shifter's Pi-side (VCCA) power/ground and its `OE` pin also come
+off the 40-pin header but aren't part of the 13-pin harness itself:
+
+| Level shifter pin | Pi GPIO (BCM) | Pi Header Pin # | Purpose |
+|---|---|---|---|
+| VCCA | - | 1 or 17 (3.3V) | Level shifter Pi-side supply |
+| OE | - | 1 or 17 (3.3V) | Tied to VCCA to enable level shifting |
+| GNDA | - | Any GND pin (shared with GNDB) | Level shifter Pi-side ground |
 
 
 ## JukeboxPanel Protocol
