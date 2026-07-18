@@ -50,6 +50,21 @@ class PlaybackPauseFlashConfig:
     flash_interval_s: float = 0.75
 
 
+@dataclass(frozen=True)
+class SSHWorkerConfig:
+    """Connection settings for MusicAppSSHWorker -- the SSH link to the
+    machine running the macOS Music app, used for commands that
+    shairport-sync's own MQTT metadata has no equivalent for."""
+    host: str
+    username: str
+    key_path: str
+    port: int = 22
+    keepalive_interval_s: float = 30.0
+    reconnect_delay_s: float = 5.0
+    connect_timeout_s: float = 10.0
+    strict_host_key_checking: bool = False
+
+
 class Config:
     """Parses the jukebox's INI config file (defaults to src/config.ini).
 
@@ -68,6 +83,9 @@ class Config:
         display after a keypad track selection completes.
       - `playbackPauseFlash`: flash timing for the 4-digit display while
         playback is paused.
+      - `sshWorker`: connection settings for the SSH link to the machine
+        running the macOS Music app. Section is optional; omitting it
+        disables the feature entirely.
     """
 
     def __init__(self, path: Optional[str] = None) -> None:
@@ -142,6 +160,26 @@ class Config:
         section = self._parser["playbackPauseFlash"]
         return PlaybackPauseFlashConfig(
             flash_interval_s=section.getfloat("flash_interval_s", fallback=0.75),
+        )
+
+    def ssh_worker(self) -> Optional[SSHWorkerConfig]:
+        if "sshWorker" not in self._parser:
+            return None
+
+        section = self._parser["sshWorker"]
+        missing = [key for key in ("host", "username", "key_path") if not section.get(key)]
+        if missing:
+            raise ValueError(f"[sshWorker] is missing required key(s): {missing}")
+
+        return SSHWorkerConfig(
+            host=section["host"],
+            username=section["username"],
+            key_path=section["key_path"],
+            port=section.getint("port", fallback=22),
+            keepalive_interval_s=section.getfloat("keepalive_interval_s", fallback=30.0),
+            reconnect_delay_s=section.getfloat("reconnect_delay_s", fallback=5.0),
+            connect_timeout_s=section.getfloat("connect_timeout_s", fallback=10.0),
+            strict_host_key_checking=section.getboolean("strict_host_key_checking", fallback=False),
         )
 
     def playlist_path(self) -> Optional[str]:

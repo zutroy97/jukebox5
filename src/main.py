@@ -14,6 +14,7 @@ from observers import UpdateEventType, Coordinator, SingleTextLineAnimatedObserv
 from panel.panel_input_base import JukeboxPanelArduinoSerial
 from panel.jukebox_panel_linux_ascii import JukeboxPanelLinuxAsciiModule
 from panel.jukebox_panel_linux_binary import JukeboxPanelLinuxBinaryModule
+from music_app_ssh_worker import MusicAppSSHWorker
 from playlist import Playlist
 from shairport_mqtt import ShairportSyncMQTTSource
 
@@ -184,12 +185,29 @@ def main(config_path=None):
     )
     source.start()
 
+    ssh_worker_config = config.ssh_worker()
+    ssh_worker = None
+    if ssh_worker_config is not None:
+        ssh_worker = MusicAppSSHWorker(
+            host=ssh_worker_config.host,
+            username=ssh_worker_config.username,
+            key_path=ssh_worker_config.key_path,
+            port=ssh_worker_config.port,
+            keepalive_interval_s=ssh_worker_config.keepalive_interval_s,
+            reconnect_delay_s=ssh_worker_config.reconnect_delay_s,
+            connect_timeout_s=ssh_worker_config.connect_timeout_s,
+            strict_host_key_checking=ssh_worker_config.strict_host_key_checking,
+        )
+        ssh_worker.start()
+
     coordinator.add_message("Weather", "Sunny 72°F", ttl_s=300, display_s=5)
 
     try:
         threading.Event().wait()
     except KeyboardInterrupt:
         source.stop()
+        if ssh_worker is not None:
+            ssh_worker.stop()
         coordinator.shutdown()
 
 
