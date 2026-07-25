@@ -177,23 +177,48 @@ def main(config_path=None):
     def onActiveEnd():
         coordinator.clear_for_inactive()
 
+    # The recovery script's own success sentinel (see the return "OK" line
+    # in src/osx/scripts/recover_airplay_playback.js) -- osascript's exit
+    # status is 0 either way (it only ever throws for a scripting error, not
+    # a "device not found"/"not available" outcome), so this is the only
+    # way to tell success from failure.
+    _RECOVERY_SUCCESS_OUTPUT = "OK"
+
     def runAirplayRecovery(reason: str) -> None:
         # Callers all run this off the coordinator thread already (a
         # background thread the MQTT source spawns per remote command, or
         # the startup grace-period timer below), so it's safe to block here
-        # -- both on the SSH exec itself and on showing/removing the status
-        # message, which is just another thread-safe coordinator call --
-        # without freezing the panel display/keypad.
+        # -- both on the SSH exec(s)/retry sleeps and on showing/removing
+        # status messages, which are just another thread-safe coordinator
+        # call -- without freezing the panel display/keypad.
         if ssh_worker is None:
             return
-        coordinator.add_message("Status", "connecting to mac", ttl_s=0, display_s=5)
-        try:
-            result = ssh_worker.recover_airplay_playback()
-            logger.warning("%s -- ran AirPlay recovery over SSH: %s", reason, (result.stdout or result.stderr).strip())
-        except ConnectionError as e:
-            logger.warning("%s, but SSH worker isn't connected: %s", reason, e)
-        finally:
-            coordinator.remove_message("Status")
+        attempts = ssh_worker_config.recovery_attempts
+        retry_delay_s = ssh_worker_config.recovery_retry_delay_s
+        for attempt in range(1, attempts + 1):
+            status = "connecting to mac" if attempts == 1 else f"connecting to mac ({attempt}/{attempts})"
+            coordinator.add_message("Status", status, ttl_s=0, display_s=5)
+            try:
+                result = ssh_worker.recover_airplay_playback()
+                output = (result.stdout or result.stderr).strip()
+                logger.warning(
+                    "%s -- ran AirPlay recovery over SSH (attempt %d/%d): %s",
+                    reason, attempt, attempts, output,
+                )
+                if result.ok and output == _RECOVERY_SUCCESS_OUTPUT:
+                    coordinator.remove_message("Error")
+                    return
+            except ConnectionError as e:
+                logger.warning(
+                    "%s, but SSH worker isn't connected (attempt %d/%d): %s",
+                    reason, attempt, attempts, e,
+                )
+            finally:
+                coordinator.remove_message("Status")
+            if attempt < attempts:
+                time.sleep(retry_delay_s)
+
+        coordinator.add_message("Error", "Mac connection failed", ttl_s=0, display_s=5)
 
     def onRemoteCommandUnresponsive():
         runAirplayRecovery("MQTT remote command unresponsive")
@@ -206,10 +231,12 @@ def main(config_path=None):
 
     def onSongChanged(artist: str, song_title: str, album: str = "") -> None:
         startup_playback_seen[0] = True
+        coordinator.remove_message("Error")
         coordinator.update_song_info(artist, song_title, album)
 
     def onPlaybackResumedWithStartupTracking():
         startup_playback_seen[0] = True
+        coordinator.remove_message("Error")
         onPlaybackResumed()
 
     def checkStartupPlayback():

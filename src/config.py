@@ -77,6 +77,10 @@ class SSHWorkerConfig:
     # nothing is already playing. An independent setting from
     # airplay_device_name -- don't assume the two match.
     playlist_name: str = "Jukebox"
+    # How many times to attempt the recovery script before giving up, and
+    # how long to wait between attempts.
+    recovery_attempts: int = 3
+    recovery_retry_delay_s: float = 5.0
 
 
 class Config:
@@ -200,6 +204,8 @@ class Config:
             strict_host_key_checking=section.getboolean("strict_host_key_checking", fallback=False),
             airplay_device_name=section.get("airplay_device_name", fallback=None) or socket.gethostname(),
             playlist_name=section.get("playlist_name", fallback="Jukebox"),
+            recovery_attempts=section.getint("recovery_attempts", fallback=3),
+            recovery_retry_delay_s=section.getfloat("recovery_retry_delay_s", fallback=5.0),
         )
 
     def playlist_path(self) -> Optional[str]:
