@@ -23,6 +23,13 @@ from serial import Serial
 
 TRACK_INDEX_OFFSET = 100
 
+# How long to wait after the MQTT connection first comes up for some sign of
+# an already-active shairport-sync session (a song-changed or play_resume
+# event) before concluding nothing is playing and running the AirPlay
+# recovery script. Only checked once, at startup -- not on later
+# reconnects, which don't imply playback actually stopped.
+STARTUP_NOTHING_PLAYING_GRACE_S = 5.0
+
 led0 = ldisp.led16_display(addr=(0x70, 0x71))
 led1 = ldisp.led16_display(addr=(0x72, 0x73, 0x74))
 
@@ -170,30 +177,60 @@ def main(config_path=None):
     def onActiveEnd():
         coordinator.clear_for_inactive()
 
-    def onRemoteCommandUnresponsive():
-        # Called from a background thread the MQTT source spawns per
-        # command (see ShairportSyncMQTTSource._await_remote_command_ack) --
-        # never from the coordinator thread -- so it's safe to let the SSH
-        # exec block here without freezing the panel display/keypad.
+    def runAirplayRecovery(reason: str) -> None:
+        # Callers all run this off the coordinator thread already (a
+        # background thread the MQTT source spawns per remote command, or
+        # the startup grace-period timer below), so it's safe to block here
+        # -- both on the SSH exec itself and on showing/removing the status
+        # message, which is just another thread-safe coordinator call --
+        # without freezing the panel display/keypad.
         if ssh_worker is None:
             return
+        coordinator.add_message("Status", "connecting to mac", ttl_s=0, display_s=5)
         try:
             result = ssh_worker.recover_airplay_playback()
-            logger.warning(
-                "MQTT remote command unresponsive -- ran AirPlay recovery over SSH: %s",
-                (result.stdout or result.stderr).strip(),
-            )
+            logger.warning("%s -- ran AirPlay recovery over SSH: %s", reason, (result.stdout or result.stderr).strip())
         except ConnectionError as e:
-            logger.warning("MQTT remote command unresponsive, but SSH worker isn't connected: %s", e)
+            logger.warning("%s, but SSH worker isn't connected: %s", reason, e)
+        finally:
+            coordinator.remove_message("Status")
+
+    def onRemoteCommandUnresponsive():
+        runAirplayRecovery("MQTT remote command unresponsive")
+
+    # Set as soon as there's any sign of an already-active shairport-sync
+    # session, so the startup check below can tell "nothing playing" apart
+    # from "haven't heard from shairport-sync yet".
+    startup_playback_seen = [False]
+    startup_check_scheduled = [False]
+
+    def onSongChanged(artist: str, song_title: str, album: str = "") -> None:
+        startup_playback_seen[0] = True
+        coordinator.update_song_info(artist, song_title, album)
+
+    def onPlaybackResumedWithStartupTracking():
+        startup_playback_seen[0] = True
+        onPlaybackResumed()
+
+    def checkStartupPlayback():
+        if startup_playback_seen[0]:
+            return
+        runAirplayRecovery("Nothing playing via shairport-sync at startup")
+
+    def onConnectionEstablishedThenScheduleStartupCheck():
+        onConnectionEstablished()
+        if not startup_check_scheduled[0]:
+            startup_check_scheduled[0] = True
+            threading.Timer(STARTUP_NOTHING_PLAYING_GRACE_S, checkStartupPlayback).start()
 
     source = ShairportSyncMQTTSource(
-        on_song_changed=coordinator.update_song_info,
+        on_song_changed=onSongChanged,
         on_play_end=coordinator.play_ended,
         on_track_id_changed=onTrackIdChanged,
         on_connection_lost=onConnectionLost,
-        on_connection_established=onConnectionEstablished,
+        on_connection_established=onConnectionEstablishedThenScheduleStartupCheck,
         on_playback_paused=onPlaybackPaused,
-        on_playback_resumed=onPlaybackResumed,
+        on_playback_resumed=onPlaybackResumedWithStartupTracking,
         on_active_end=onActiveEnd,
         on_remote_command_unresponsive=onRemoteCommandUnresponsive,
         broker_host=mqtt_config.broker_host,
@@ -219,8 +256,6 @@ def main(config_path=None):
             playlist_name=ssh_worker_config.playlist_name,
         )
         ssh_worker.start()
-
-    coordinator.add_message("Weather", "Sunny 72°F", ttl_s=300, display_s=5)
 
     try:
         threading.Event().wait()
