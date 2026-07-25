@@ -1,5 +1,6 @@
 import configparser
 import os
+import socket
 from dataclasses import dataclass, field
 from typing import Optional
 
@@ -67,10 +68,15 @@ class SSHWorkerConfig:
     reconnect_delay_s: float = 5.0
     connect_timeout_s: float = 10.0
     strict_host_key_checking: bool = False
-    # Name of the AirPlay device (and matching Music.app playlist) the
-    # recovery script should select/play -- how this jukebox install's
-    # AirPlay receiver is named, since that varies per deployment too.
-    airplay_device_name: str = "Jukebox"
+    # Name of the AirPlay device the recovery script should select. Defaults
+    # to this machine's own hostname, since that's what shairport-sync
+    # advertises itself as over AirPlay unless configured otherwise --
+    # unrelated to playlist_name below.
+    airplay_device_name: str = field(default_factory=socket.gethostname)
+    # Music.app playlist the recovery script should start playing if
+    # nothing is already playing. An independent setting from
+    # airplay_device_name -- don't assume the two match.
+    playlist_name: str = "Jukebox"
 
 
 class Config:
@@ -92,10 +98,11 @@ class Config:
       - `playbackPauseFlash`: flash timing for the 4-digit display while
         playback is paused.
       - `sshWorker`: connection settings for the SSH link to the machine
-        running the macOS Music app, plus the AirPlay device name its
-        recovery script (src/osx/scripts/recover_airplay_playback.js) should
-        target. Section is optional; omitting it disables the feature
-        entirely.
+        running the macOS Music app, plus the AirPlay device name and
+        playlist name its recovery script
+        (src/osx/scripts/recover_airplay_playback.js) should target --
+        independent settings, not assumed to match each other. Section is
+        optional; omitting it disables the feature entirely.
     """
 
     def __init__(self, path: Optional[str] = None) -> None:
@@ -191,7 +198,8 @@ class Config:
             reconnect_delay_s=section.getfloat("reconnect_delay_s", fallback=5.0),
             connect_timeout_s=section.getfloat("connect_timeout_s", fallback=10.0),
             strict_host_key_checking=section.getboolean("strict_host_key_checking", fallback=False),
-            airplay_device_name=section.get("airplay_device_name", fallback="Jukebox"),
+            airplay_device_name=section.get("airplay_device_name", fallback=None) or socket.gethostname(),
+            playlist_name=section.get("playlist_name", fallback="Jukebox"),
         )
 
     def playlist_path(self) -> Optional[str]:

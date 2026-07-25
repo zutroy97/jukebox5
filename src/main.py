@@ -216,6 +216,7 @@ def main(config_path=None):
             connect_timeout_s=ssh_worker_config.connect_timeout_s,
             strict_host_key_checking=ssh_worker_config.strict_host_key_checking,
             airplay_device_name=ssh_worker_config.airplay_device_name,
+            playlist_name=ssh_worker_config.playlist_name,
         )
         ssh_worker.start()
 
