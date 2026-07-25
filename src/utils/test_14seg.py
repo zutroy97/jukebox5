@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Segment-by-segment hardware test for the 14-segment HT16K33 displays at
-I2C addresses 0x70/0x71 (the 8-character "label" line -- see
-docs/SPECIFICATION.md).
+I2C addresses 0x70-0x74 -- the 8-character "label" line (0x70/0x71) and the
+12-character "value" line (0x72/0x73/0x74), see docs/SPECIFICATION.md.
 
 Lights each of the display's 14 segments (plus the decimal point) one at a
 time, in lockstep across every character position, so a bad solder joint or
@@ -11,7 +11,7 @@ glyphs ('8' = 0xFF = A-G2, '-' = 0xC0 = G1+G2, '_' = 0x08 = D, '1' = 0x06 =
 B+C, 'H' = 0xF6, '0' = 0xC3F which adds K+L as the zero-slash, 'X' = 0x2D00
 = the four diagonals H/K/L/N).
 
-Usage: test_14seg.py [--addr 0x70,0x71] [--delay 0.6] [--brightness 0.5] [--mode all]
+Usage: test_14seg.py [--addr 0x70,0x71,0x72,0x73,0x74] [--delay 0.6] [--brightness 0.5] [--mode all]
 """
 import argparse
 import time
@@ -73,8 +73,9 @@ def run_sweep(display: segments.Seg14x4, hold_s: float):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
-        "--addr", default="0x70,0x71",
-        help="comma-separated I2C addresses of the HT16K33 chips to test (default: 0x70,0x71)",
+        "--addr", default="0x70,0x71,0x72,0x73,0x74",
+        help="comma-separated I2C addresses of the HT16K33 chips to test "
+             "(default: 0x70,0x71,0x72,0x73,0x74 -- both the label and value displays)",
     )
     parser.add_argument(
         "--delay", type=float, default=0.6,
