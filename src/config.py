@@ -32,6 +32,10 @@ class MQTTConfig:
     broker_host: str = "localhost"
     broker_port: int = 1883
     base_topic: str = "shairport-sync"
+    # Seconds to wait for the broker to PUBACK a remote-control command
+    # (see ShairportSyncMQTTSource.send_remote_command) before treating that
+    # path as unresponsive and falling back to sshWorker's AirPlay recovery.
+    remote_command_timeout_s: float = 5.0
 
 
 @dataclass(frozen=True)
@@ -63,6 +67,10 @@ class SSHWorkerConfig:
     reconnect_delay_s: float = 5.0
     connect_timeout_s: float = 10.0
     strict_host_key_checking: bool = False
+    # Name of the AirPlay device (and matching Music.app playlist) the
+    # recovery script should select/play -- how this jukebox install's
+    # AirPlay receiver is named, since that varies per deployment too.
+    airplay_device_name: str = "Jukebox"
 
 
 class Config:
@@ -84,8 +92,10 @@ class Config:
       - `playbackPauseFlash`: flash timing for the 4-digit display while
         playback is paused.
       - `sshWorker`: connection settings for the SSH link to the machine
-        running the macOS Music app. Section is optional; omitting it
-        disables the feature entirely.
+        running the macOS Music app, plus the AirPlay device name its
+        recovery script (src/osx/scripts/recover_airplay_playback.js) should
+        target. Section is optional; omitting it disables the feature
+        entirely.
     """
 
     def __init__(self, path: Optional[str] = None) -> None:
@@ -139,6 +149,7 @@ class Config:
             broker_host=section.get("broker_host", fallback="localhost"),
             broker_port=section.getint("broker_port", fallback=1883),
             base_topic=section.get("base_topic", fallback="shairport-sync"),
+            remote_command_timeout_s=section.getfloat("remote_command_timeout_s", fallback=5.0),
         )
 
     def track_selection_feedback(self) -> TrackSelectionFeedbackConfig:
@@ -180,6 +191,7 @@ class Config:
             reconnect_delay_s=section.getfloat("reconnect_delay_s", fallback=5.0),
             connect_timeout_s=section.getfloat("connect_timeout_s", fallback=10.0),
             strict_host_key_checking=section.getboolean("strict_host_key_checking", fallback=False),
+            airplay_device_name=section.get("airplay_device_name", fallback="Jukebox"),
         )
 
     def playlist_path(self) -> Optional[str]:

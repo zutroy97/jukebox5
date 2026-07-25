@@ -170,6 +170,22 @@ def main(config_path=None):
     def onActiveEnd():
         coordinator.clear_for_inactive()
 
+    def onRemoteCommandUnresponsive():
+        # Called from a background thread the MQTT source spawns per
+        # command (see ShairportSyncMQTTSource._await_remote_command_ack) --
+        # never from the coordinator thread -- so it's safe to let the SSH
+        # exec block here without freezing the panel display/keypad.
+        if ssh_worker is None:
+            return
+        try:
+            result = ssh_worker.recover_airplay_playback()
+            logger.warning(
+                "MQTT remote command unresponsive -- ran AirPlay recovery over SSH: %s",
+                (result.stdout or result.stderr).strip(),
+            )
+        except ConnectionError as e:
+            logger.warning("MQTT remote command unresponsive, but SSH worker isn't connected: %s", e)
+
     source = ShairportSyncMQTTSource(
         on_song_changed=coordinator.update_song_info,
         on_play_end=coordinator.play_ended,
@@ -179,9 +195,11 @@ def main(config_path=None):
         on_playback_paused=onPlaybackPaused,
         on_playback_resumed=onPlaybackResumed,
         on_active_end=onActiveEnd,
+        on_remote_command_unresponsive=onRemoteCommandUnresponsive,
         broker_host=mqtt_config.broker_host,
         broker_port=mqtt_config.broker_port,
         base_topic=mqtt_config.base_topic,
+        remote_command_timeout_s=mqtt_config.remote_command_timeout_s,
     )
     source.start()
 
@@ -197,6 +215,7 @@ def main(config_path=None):
             reconnect_delay_s=ssh_worker_config.reconnect_delay_s,
             connect_timeout_s=ssh_worker_config.connect_timeout_s,
             strict_host_key_checking=ssh_worker_config.strict_host_key_checking,
+            airplay_device_name=ssh_worker_config.airplay_device_name,
         )
         ssh_worker.start()
 

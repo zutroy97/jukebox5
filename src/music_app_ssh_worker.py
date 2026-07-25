@@ -1,10 +1,21 @@
+import base64
+import json
 import logging
 import threading
 import time
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Callable, Optional
 
 import paramiko
+
+_OSX_SCRIPTS_DIR = Path(__file__).parent / "osx" / "scripts"
+_RECOVER_AIRPLAY_PLAYBACK_SCRIPT_PATH = _OSX_SCRIPTS_DIR / "recover_airplay_playback.js"
+# Includes the surrounding quotes from the .js file's dummy string literal
+# (`"__AIRPLAY_DEVICE_NAME__"`) so the whole literal -- quotes and all -- is
+# replaced by json.dumps(device_name)'s own quoting, rather than nesting
+# one inside the other.
+_AIRPLAY_DEVICE_NAME_PLACEHOLDER = '"__AIRPLAY_DEVICE_NAME__"'
 
 
 @dataclass(frozen=True)
@@ -22,8 +33,10 @@ class MusicAppSSHWorker:
     """Maintains a persistent SSH connection (authenticated via a private
     key, never a password) to the machine running the macOS "Music"
     application, so the jukebox can run commands there that shairport-sync's
-    own MQTT metadata has no equivalent for (e.g. AppleScript/`osascript`
-    automation of the Music app itself).
+    own MQTT metadata has no equivalent for (currently just
+    recover_airplay_playback() -- JavaScript for Automation/`osascript`
+    automation of the Music app itself, piped in over the connection rather
+    than run from a file on the remote machine).
 
     Mirrors ShairportSyncMQTTSource's connection-lifecycle shape: a
     background thread holds one connection at a time, a keepalive keeps it
@@ -42,6 +55,7 @@ class MusicAppSSHWorker:
         reconnect_delay_s: float = 5.0,
         connect_timeout_s: float = 10.0,
         strict_host_key_checking: bool = False,
+        airplay_device_name: str = "Jukebox",
         on_connection_lost: Optional[Callable[[], None]] = None,
         on_connection_established: Optional[Callable[[], None]] = None,
     ) -> None:
@@ -54,6 +68,14 @@ class MusicAppSSHWorker:
         self._reconnect_delay_s = reconnect_delay_s
         self._connect_timeout_s = connect_timeout_s
         self._strict_host_key_checking = strict_host_key_checking
+        # Name of the AirPlay device (and identically-named Music.app
+        # playlist) recover_airplay_playback() should target -- varies per
+        # jukebox install, so it's substituted into the script text rather
+        # than hardcoded there. Read at construction (not per-call) so a
+        # missing/unreadable script file fails fast at startup instead of
+        # hours into runtime, the first time recovery is actually needed.
+        self._airplay_device_name = airplay_device_name
+        self._recover_airplay_playback_script_template = _RECOVER_AIRPLAY_PLAYBACK_SCRIPT_PATH.read_text()
         self._on_connection_lost = on_connection_lost
         self._on_connection_established = on_connection_established
 
@@ -95,6 +117,29 @@ class MusicAppSSHWorker:
             stdout=stdout.read().decode("utf-8", errors="replace"),
             stderr=stderr.read().decode("utf-8", errors="replace"),
         )
+
+    def recover_airplay_playback(self, timeout_s: Optional[float] = 30.0) -> CommandResult:
+        """Run src/osx/scripts/recover_airplay_playback.js on the remote machine (as
+        JavaScript for Automation, via osascript) to re-select
+        airplay_device_name's AirPlay device in the Music app and
+        resume/start playback from the identically-named playlist.
+        Intended as the fallback for when ShairportSyncMQTTSource's
+        on_remote_command_unresponsive fires.
+
+        The script never touches disk on the remote machine: it's read from
+        this codebase, has the device name substituted in, and is
+        base64-piped directly into `osascript -l JavaScript`'s stdin over
+        the existing SSH connection -- so there's nothing to separately
+        deploy to the Mac.
+
+        Raises ConnectionError (via execute()) if the SSH session is not
+        currently up."""
+        script = self._recover_airplay_playback_script_template.replace(
+            _AIRPLAY_DEVICE_NAME_PLACEHOLDER, json.dumps(self._airplay_device_name)
+        )
+        encoded = base64.b64encode(script.encode()).decode()
+        command = f"echo {encoded} | base64 -d | osascript -l JavaScript"
+        return self.execute(command, timeout_s=timeout_s)
 
     def _is_connected_locked(self) -> bool:
         transport = self._client.get_transport() if self._client else None

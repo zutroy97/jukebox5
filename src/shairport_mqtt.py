@@ -11,6 +11,10 @@ class ShairportSyncMQTTSource:
         on_song_changed(artist, title, album)  — when a new track starts
         on_play_end()                          — when shairport-sync/play_end is received
         on_track_id_changed(track_id)          — when a new track_id is received
+        on_remote_command_unresponsive()       — when a send_remote_command()/
+                                                  queue_next() publish goes
+                                                  unacknowledged by the broker
+                                                  for remote_command_timeout_s
 
     Artist and title are the priority fields. on_song_changed fires as soon as
     both are known. Album is included if it has already arrived; if it arrives
@@ -32,9 +36,11 @@ class ShairportSyncMQTTSource:
         on_playback_paused: Optional[Callable[[], None]] = None,
         on_playback_resumed: Optional[Callable[[], None]] = None,
         on_active_end: Optional[Callable[[], None]] = None,
+        on_remote_command_unresponsive: Optional[Callable[[], None]] = None,
         broker_host: str = "localhost",
         broker_port: int = 1883,
         base_topic: str = "shairport-sync",
+        remote_command_timeout_s: float = 5.0,
         client_id: Optional[str] = None,
     ) -> None:
         self._logger = logging.getLogger(__class__.__name__)
@@ -55,9 +61,11 @@ class ShairportSyncMQTTSource:
         self._on_playback_paused = on_playback_paused
         self._on_playback_resumed = on_playback_resumed
         self._on_active_end = on_active_end
+        self._on_remote_command_unresponsive = on_remote_command_unresponsive
         self._broker_host = broker_host
         self._broker_port = broker_port
         self._base_topic = base_topic.rstrip("/")
+        self._remote_command_timeout_s = remote_command_timeout_s
 
         self._artist: Optional[str] = None
         self._title: Optional[str] = None
@@ -101,12 +109,39 @@ class ShairportSyncMQTTSource:
     def send_remote_command(self, command: str) -> None:
         """Publish a plain shairport-sync remote command (e.g. "playpause",
         "nextitem", "previtem" -- see shairport-sync's own documented
-        remote-control vocabulary) to <base_topic>/remote."""
-        result = self._client.publish(self._topic_remote, command)
-        if result.rc != mqtt.MQTT_ERR_SUCCESS:
-            self._logger.warning("Failed to publish %r to %s (rc=%d)", command, self._topic_remote, result.rc)
-        else:
-            self._logger.info("Published %r to %s", command, self._topic_remote)
+        remote-control vocabulary) to <base_topic>/remote, at QoS 1.
+
+        Returns immediately -- publishing itself never blocks the caller --
+        but a background thread waits up to remote_command_timeout_s for the
+        broker to PUBACK the message, and calls
+        on_remote_command_unresponsive() if it doesn't. shairport-sync's own
+        MQTT remote-control feature has no ack of its own (there's no
+        confirmation it actually reached/took effect on the AirPlay source),
+        so a missing broker PUBACK is the earliest and only observable
+        signal here that this path isn't currently working."""
+        msg_info = self._client.publish(self._topic_remote, command, qos=1)
+        if msg_info.rc != mqtt.MQTT_ERR_SUCCESS:
+            self._logger.warning("Failed to publish %r to %s (rc=%d)", command, self._topic_remote, msg_info.rc)
+            if self._on_remote_command_unresponsive:
+                self._on_remote_command_unresponsive()
+            return
+
+        self._logger.info("Published %r to %s", command, self._topic_remote)
+        threading.Thread(
+            target=self._await_remote_command_ack,
+            args=(command, msg_info),
+            daemon=True,
+        ).start()
+
+    def _await_remote_command_ack(self, command: str, msg_info) -> None:
+        msg_info.wait_for_publish(timeout=self._remote_command_timeout_s)
+        if not msg_info.is_published():
+            self._logger.warning(
+                "Remote command %r not acknowledged by broker within %.1fs",
+                command, self._remote_command_timeout_s,
+            )
+            if self._on_remote_command_unresponsive:
+                self._on_remote_command_unresponsive()
 
     def stop(self) -> None:
         self._running = False
