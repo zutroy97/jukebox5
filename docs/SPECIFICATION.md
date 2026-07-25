@@ -105,7 +105,12 @@ For each of **8 scan steps** (address 0–7):
 1. Drive the 3-bit address on the shared lines: LSB on the 4-digit data
    line, next bit on the 3-digit data line, MSB on the matrix-select
    line.
-2. Wait a short settle time (5µs in this implementation).
+2. Wait a short settle time (50µs in this implementation, runtime-tunable
+   via the `keypad_settle_us` module parameter -- raised from an original
+   5µs while chasing a spurious-signature issue, though later testing
+   against real hardware found no measurable difference between 5µs and
+   50µs; kept at the more generous value anyway since there's no real
+   cost to it).
 3. Sample both keypad row-input lines. Row-input-1's reading becomes bit
    `i` of a 16-bit accumulator; row-input-0's reading becomes bit `i+8`.
 
@@ -122,13 +127,25 @@ After scanning, the shared address lines must be driven back to their
 keypad scan's address bits bleed onto the display shift-register lines.
 
 **Debounce**: the raw signature is sampled continuously (e.g. once every
-5ms). Whenever the sampled signature changes from the previous sample, a
-stability timer resets. Only once the *same* signature has been stable
-for more than a debounce window (50ms default) is it considered a
-genuine settled press, and it is reported **exactly once** — holding the
-key down does not re-report it; a new report only fires once the
-signature changes to something else (including back to idle) and then a
-new signature stabilizes.
+5ms), using a leading-edge/lockout design rather than "wait for
+continuous stability, then report": a non-idle signature is trusted (and
+reported) as soon as it's read consistently for a short confirm window
+(`keypad_confirm_ms`, 10ms default) — long enough to reject single-sample
+electrical noise, short enough that a worn switch's own bounce doesn't
+keep resetting it before it ever accumulates enough continuous stable
+time (the failure mode of an earlier "must stay perfectly still for the
+whole debounce window" design this replaced, which could silently drop a
+genuine tap entirely under exactly that kind of bounce). After reporting,
+all further signature changes are ignored for a lockout period
+(`keypad_debounce_ms`, 50ms default) — covering the rest of that same
+bounce — and a new press isn't recognized until the scan reads idle for
+`keypad_confirm_ms` too, confirming the key was actually released. If
+that clean idle read never comes (observed on real hardware: a
+sufficiently noisy line can bounce indefinitely and never sit still), a
+bounded safety-net timeout (`keypad_rearm_timeout_ms`, 300ms default)
+forces re-arming anyway, trading the "reported exactly once per press"
+guarantee for an unusually long hold in exchange for the keypad never
+getting stuck unresponsive.
 
 ### 3.3 Character encoding
 
@@ -185,7 +202,14 @@ original Arduino firmware spoke over a serial port:
 
 Multiple concurrent readers are supported (each settled button event is
 delivered to exactly one waiting reader, not broadcast to all — readers
-compete for events from a shared FIFO).
+compete for events from a shared FIFO). Opening the device clears any
+events already sitting in that FIFO first, so a fresh open() always
+starts from a known-clean state rather than potentially receiving a
+leftover event queued before this reader existed (e.g. one settled right
+as a previous reader exited without consuming it). With more than one
+reader open at once, a later open() clears events an earlier one hasn't
+consumed yet too — an accepted tradeoff for this device's actual usage
+(normally exactly one long-lived reader).
 
 Character-remapping note: this text protocol's signature→character table
 is the **original, unmodified** mapping straight off the physical

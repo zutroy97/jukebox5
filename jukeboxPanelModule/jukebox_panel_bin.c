@@ -77,9 +77,31 @@ MODULE_PARM_DESC(gpio_keypad_in0, "BCM GPIO for keypad row input 0 (default 25)"
 module_param(gpio_keypad_in1, int, 0444);
 MODULE_PARM_DESC(gpio_keypad_in1, "BCM GPIO for keypad row input 1 (default 5)");
 
+/* Post-report lockout duration -- see keypad_scan_thread_fn()'s comment
+ * for why this is no longer "how long a key must sit still before being
+ * reported" (that's keypad_confirm_ms now). Kept as the same name/default
+ * since it still serves the same broad purpose (rejecting switch
+ * chatter), just at a different point in the state machine. */
 static int keypad_debounce_ms = 50;
 module_param(keypad_debounce_ms, int, 0644);
-MODULE_PARM_DESC(keypad_debounce_ms, "Milliseconds a key must be stable before it is reported");
+MODULE_PARM_DESC(keypad_debounce_ms, "Milliseconds to ignore further signature changes after a press is reported");
+
+/* How long a signature must read consistently before being trusted at
+ * all -- just enough to reject single-sample electrical noise, not a full
+ * debounce window. See keypad_scan_thread_fn(). */
+static int keypad_confirm_ms = 10;
+module_param(keypad_confirm_ms, int, 0644);
+MODULE_PARM_DESC(keypad_confirm_ms, "Milliseconds a signature must read consistently before being trusted (press or idle)");
+
+/* Safety-net cap on how long the post-report lockout can last waiting for
+ * a clean idle read -- see keypad_scan_thread_fn()'s KEYPAD_LOCKED_OUT
+ * comment. Must be well above keypad_debounce_ms (the normal-case lockout
+ * length) or it would fire before that even elapses. A tap held longer
+ * than this will re-fire (loses the "exactly once per press" guarantee
+ * for unusually long holds) rather than wedging the whole keypad. */
+static int keypad_rearm_timeout_ms = 300;
+module_param(keypad_rearm_timeout_ms, int, 0644);
+MODULE_PARM_DESC(keypad_rearm_timeout_ms, "Milliseconds after a report to force re-arming even without a confirmed idle read");
 
 static int keypad_scan_period_ms = 5;
 module_param(keypad_scan_period_ms, int, 0644);
@@ -89,7 +111,16 @@ static int bit_delay_us = 400;
 module_param(bit_delay_us, int, 0644);
 MODULE_PARM_DESC(bit_delay_us, "Microseconds to hold each display clock phase (default 400)");
 
-#define KEYPAD_SETTLE_US 5
+/* Was a hardcoded 5us #define; raised to a more generous default and made
+ * runtime-tunable after 0xfdff (row-input-1 shorted at scan address 1)
+ * was observed settling in and passing keypad_debounce_ms as a phantom
+ * event after nearly every real keypress -- consistent with the level
+ * shifter/matrix bus not having fully settled 5us after the address-0->1
+ * transition (the first GPIO edge of the scan, right as data4 flips
+ * 0->1) before being sampled. */
+static int keypad_settle_us = 50;
+module_param(keypad_settle_us, int, 0644);
+MODULE_PARM_DESC(keypad_settle_us, "Microseconds to wait after driving a scan address before sampling row inputs (default 50)");
 
 /* ------------------------------------------------------------------ */
 /* 7-segment digit map, ported verbatim from jukebox_panel.c's           */
@@ -270,7 +301,7 @@ static u16 scan_keypad_raw(void)
 		gpiod_set_raw_value(desc_data4, i & 0x01);
 		gpiod_set_raw_value(desc_data3, i & 0x02);
 		gpiod_set_raw_value(desc_matrix_c, i & 0x04);
-		udelay(KEYPAD_SETTLE_US);
+		udelay(keypad_settle_us);
 		if (gpiod_get_raw_value(desc_keypad_in0))
 			result |= BIT(i);
 		if (gpiod_get_raw_value(desc_keypad_in1))
@@ -317,19 +348,37 @@ static void queue_button_event(u16 raw)
 
 /* Debounce state, mirroring jukebox_panel.c's keypad_scan_thread_fn()
  * exactly, just operating on the raw signature instead of a decoded
- * character: a signature must read the same non-idle value continuously
- * for keypad_debounce_ms before it is reported, and is reported exactly
- * once per press (not repeated while held). */
+ * character.
+ *
+ * Leading-edge/lockout design (changed from an earlier trailing-edge one
+ * that required a signature to sit perfectly still for keypad_debounce_ms
+ * before reporting it): a worn mechanical switch can bounce -- make,
+ * break, make again -- across a span longer than that, which a
+ * "must-stay-still" window can miss entirely (never accumulates enough
+ * continuous stable time, so the tap is silently dropped even though the
+ * switch clearly closed). Reporting instead fires as soon as a non-idle
+ * signature reads consistently for just keypad_confirm_ms (long enough to
+ * reject single-sample electrical noise, short enough that ongoing bounce
+ * doesn't reset it back to zero), then all further signature changes are
+ * ignored for keypad_debounce_ms -- covering the rest of that same
+ * bounce, including known glitches like 0xfdff's release artifact -- and
+ * a new press isn't recognized until the scan reads idle for
+ * keypad_confirm_ms too, confirming the key was actually released. */
 static struct task_struct *keypad_thread;
+
+enum keypad_state { KEYPAD_ARMED, KEYPAD_LOCKED_OUT };
 
 static int keypad_scan_thread_fn(void *unused)
 {
+	enum keypad_state state = KEYPAD_ARMED;
 	u16 last_raw = KEYPAD_IDLE_RAW;
-	u16 last_sent = KEYPAD_IDLE_RAW;
-	unsigned long stable_since = jiffies;
+	unsigned long confirmed_since = jiffies;
+	unsigned long lockout_until = jiffies;
+	unsigned long rearm_deadline = jiffies;
 
 	while (!kthread_should_stop()) {
 		u16 this_raw;
+		bool confirmed;
 
 		mutex_lock(&gpio_mutex);
 		this_raw = scan_keypad_raw();
@@ -337,11 +386,35 @@ static int keypad_scan_thread_fn(void *unused)
 
 		if (this_raw != last_raw) {
 			last_raw = this_raw;
-			stable_since = jiffies;
-		} else if (jiffies_to_msecs(jiffies - stable_since) > keypad_debounce_ms) {
-			if (this_raw != KEYPAD_IDLE_RAW && this_raw != last_sent)
+			confirmed_since = jiffies;
+		}
+		confirmed = jiffies_to_msecs(jiffies - confirmed_since) >= keypad_confirm_ms;
+
+		switch (state) {
+		case KEYPAD_ARMED:
+			if (this_raw != KEYPAD_IDLE_RAW && confirmed) {
 				queue_button_event(this_raw);
-			last_sent = this_raw;
+				state = KEYPAD_LOCKED_OUT;
+				lockout_until = jiffies + msecs_to_jiffies(keypad_debounce_ms);
+				rearm_deadline = jiffies + msecs_to_jiffies(keypad_rearm_timeout_ms);
+			}
+			break;
+		case KEYPAD_LOCKED_OUT:
+			/* Prefer re-arming on a clean, confirmed idle read (the
+			 * common case for a normal tap) -- but never wait past
+			 * rearm_deadline for one, since this panel's raw signal
+			 * apparently never sits perfectly still for confirm_ms on
+			 * its own (observed: constant low-level bounce even with
+			 * nothing intentionally pressed, likely related to the
+			 * undervoltage events also showing up in dmesg). Without
+			 * this fallback, a single noisy read after a report could
+			 * wedge the state machine in LOCKED_OUT permanently. */
+			if (!time_after_eq(jiffies, lockout_until))
+				break;
+			if ((this_raw == KEYPAD_IDLE_RAW && confirmed) ||
+			    time_after_eq(jiffies, rearm_deadline))
+				state = KEYPAD_ARMED;
+			break;
 		}
 
 		msleep_interruptible(keypad_scan_period_ms);
@@ -459,6 +532,23 @@ static ssize_t jukebox_read(struct file *filp, char __user *buf, size_t count, l
 	return copied;
 }
 
+/* Clears any events left over from before this open() -- e.g. a signature
+ * that settled and got queued right as a previous reader exited (a
+ * `timeout`-killed test run, say) without ever reading it, which would
+ * otherwise surface as a phantom event firing immediately on the next
+ * open with no explanation. With more than one concurrent reader (see
+ * jukebox_read()'s comment above), a later open() also clears events an
+ * already-open earlier reader hasn't consumed yet -- an accepted tradeoff
+ * for this device's actual usage (normally exactly one long-lived reader)
+ * in exchange for every open() starting from a known-clean state. */
+static int jukebox_open(struct inode *inode, struct file *filp)
+{
+	mutex_lock(&button_fifo_mutex);
+	kfifo_reset(&button_fifo);
+	mutex_unlock(&button_fifo_mutex);
+	return 0;
+}
+
 /* Without this, select()/poll() on the fd always report "ready" (the VFS
  * default when a driver has no .poll op), which would spin userspace readers
  * in a busy loop instead of actually blocking. */
@@ -475,6 +565,7 @@ static __poll_t jukebox_poll(struct file *filp, poll_table *wait)
 
 static const struct file_operations jukebox_fops = {
 	.owner = THIS_MODULE,
+	.open = jukebox_open,
 	.write = jukebox_write,
 	.read = jukebox_read,
 	.poll = jukebox_poll,
