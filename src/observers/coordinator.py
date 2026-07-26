@@ -55,15 +55,15 @@ class _TrackSelector:
     # Entered sequence (including the leading 'P') -> command name. Most of
     # these are shairport-sync remote commands, forwarded as-is to
     # ShairportSyncMQTTSource.send_remote_command() by main.py's onCommand.
-    # "advance_display" is the one exception -- a local, playback-unrelated
-    # pseudo-command onCommand intercepts before it would otherwise reach
-    # MQTT, routing it to Coordinator.advance_display() instead to skip the
-    # alpha display ahead to its next rotation item on demand.
+    # "advance_display" and "show_ip_address" are local, playback-unrelated
+    # pseudo-commands onCommand intercepts before they'd otherwise reach
+    # MQTT -- see main.py for what each actually does.
     COMMANDS: dict[str, str] = {
         "PP": "playpause",
         "P111": "previtem",
         "P666": "nextitem",
         "P222": "advance_display",
+        "P911": "show_ip_address",
     }
 
     def __init__(

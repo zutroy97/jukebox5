@@ -1,5 +1,6 @@
 import argparse
 import json
+import socket
 import time
 import threading
 import logging
@@ -30,6 +31,9 @@ TRACK_INDEX_OFFSET = 100
 # offset into the playlist, independent of TRACK_INDEX_OFFSET above.
 IMMEDIATE_PLAY_RANGE = range(300, 501)
 IMMEDIATE_PLAY_INDEX_OFFSET = 300
+
+# How long the Pi's IP address stays in the display rotation after P911.
+SHOW_IP_ADDRESS_TTL_S = 30.0
 
 # How long to wait after the MQTT connection first comes up for some sign of
 # an already-active shairport-sync session (a song-changed or play_resume
@@ -121,12 +125,32 @@ def main(config_path=None):
             source.send_remote_command("nextitem")
         return True
 
+    def getLocalIpAddress() -> str:
+        # Connecting a UDP socket never actually sends a packet -- it just
+        # makes the kernel pick a route/local address for that destination
+        # -- so this works to find the Pi's own LAN IP even with no real
+        # connectivity to 8.8.8.8 (or the internet at all).
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+            try:
+                s.connect(("8.8.8.8", 80))
+                return s.getsockname()[0]
+            except OSError:
+                return "no network"
+
+    def showIpAddress() -> None:
+        coordinator.add_message(
+            "IP", getLocalIpAddress(), ttl_s=SHOW_IP_ADDRESS_TTL_S, display_s=5,
+        )
+
     def onCommand(command: str) -> None:
-        # "advance_display" is a local pseudo-command (see coordinator.py's
-        # COMMANDS) -- display-only, so it's handled here instead of being
-        # forwarded to shairport-sync, which wouldn't recognize it.
+        # Local pseudo-commands (see coordinator.py's COMMANDS) -- handled
+        # here instead of being forwarded to shairport-sync, which
+        # wouldn't recognize them.
         if command == "advance_display":
             coordinator.advance_display()
+            return
+        if command == "show_ip_address":
+            showIpAddress()
             return
         source.send_remote_command(command)
         if command == "playpause":
