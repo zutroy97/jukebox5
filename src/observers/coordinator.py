@@ -36,10 +36,18 @@ class _TrackSelector:
     display reverts to whatever it was showing before entry started:
       - valid:   the entered code blinks blink_count times (blink_phase_s
                  per on/off phase)
-      - invalid: error_text is shown for error_duration_s
+      - invalid: error_text is shown for error_duration_s -- unless
+                 get_invalid_feedback is given and returns a non-None
+                 (text, duration_s) override for this specific attempt
+                 (used by main.py to show "----" for 5s instead of the
+                 usual "Err"/2s when the playlist hasn't loaded from the
+                 Mac at all, distinct from a code that just doesn't match
+                 a track). Only ever consulted for track selection, never
+                 for command entry below -- a mistyped P-command has
+                 nothing to do with playlist availability.
     Command entry uses the same feedback -- valid always for an exact
     COMMANDS match (nothing else calls on_command), invalid for an
-    unmatchable sequence.
+    unmatchable sequence (always error_text/error_duration_s, no override).
 
     Feedback is driven by the same `_deadline`/`_feedback_queue` machinery
     entry-timeout uses, just repurposed once entry completes -- see
@@ -77,6 +85,7 @@ class _TrackSelector:
         blink_phase_s: float = 0.25,
         error_text: str = "Err",
         error_duration_s: float = 2.0,
+        get_invalid_feedback: Optional[Callable[[], Optional[tuple[str, float]]]] = None,
     ) -> None:
         self._panel_display = panel_display
         self._on_selection_complete = on_selection_complete
@@ -87,6 +96,7 @@ class _TrackSelector:
         self._blink_phase_s = blink_phase_s
         self._error_text = error_text
         self._error_duration_s = error_duration_s
+        self._get_invalid_feedback = get_invalid_feedback
         self._digits: str = ""
         self._mode: Optional[str] = None  # 'track' | 'command', while entering
         self._deadline: Optional[float] = None
@@ -140,7 +150,7 @@ class _TrackSelector:
             entered = self._digits
             self._finish_entry()
             is_valid = self._on_selection_complete(entered)
-            self._start_feedback(entered, is_valid)
+            self._start_feedback(entered, is_valid, is_track_selection=True)
             return
 
         # 'command' mode: fire as soon as there's an unambiguous exact
@@ -172,12 +182,17 @@ class _TrackSelector:
         self._mode = None
         self._panel_display.LeftLedSet(False)  # entry is over, made or not
 
-    def _start_feedback(self, entered: str, is_valid: bool) -> None:
+    def _start_feedback(self, entered: str, is_valid: bool, is_track_selection: bool = False) -> None:
         if is_valid:
             on_off = (self._blink_phase_s, entered.ljust(4)), (self._blink_phase_s, None)
             self._feedback_queue = list(on_off) * self._blink_count
         else:
-            self._feedback_queue = [(self._error_duration_s, self._error_text.ljust(4))]
+            text, duration_s = self._error_text, self._error_duration_s
+            if is_track_selection and self._get_invalid_feedback:
+                override = self._get_invalid_feedback()
+                if override is not None:
+                    text, duration_s = override
+            self._feedback_queue = [(duration_s, text.ljust(4))]
         self._advance_feedback()
 
     def _advance_feedback(self) -> None:
@@ -270,6 +285,7 @@ class Coordinator:
             blink_phase_s=kwargs.get('blink_phase_s', 0.25),
             error_text=kwargs.get('error_text', "Err"),
             error_duration_s=kwargs.get('error_duration_s', 2.0),
+            get_invalid_feedback=kwargs.get('get_invalid_feedback'),
         )
 
         self._event_queue: "queue.Queue[Callable[[], None]]" = queue.Queue()

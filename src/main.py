@@ -43,6 +43,14 @@ SHOW_IP_ADDRESS_TTL_S = 30.0
 # see onActiveEnd/fetchNowPlayingFromMac).
 NOTHING_PLAYING_GRACE_S = 5.0
 
+# Feedback shown on the 4-digit panel display (and alpha display, via the
+# "Playlist" message) when a track-selection code is entered before the
+# playlist has been fetched from the Mac -- distinct from the standard
+# error_text/error_duration_s shown when the playlist loaded fine but the
+# code just doesn't match any track. See onTrackSelected/loadPlaylistFromMac.
+NO_PLAYLIST_PANEL_TEXT = "----"
+NO_PLAYLIST_FEEDBACK_DURATION_S = 5.0
+
 led0 = ldisp.led16_display(addr=(0x70, 0x71))
 led1 = ldisp.led16_display(addr=(0x72, 0x73, 0x74))
 
@@ -114,10 +122,16 @@ def main(config_path=None):
             coordinator_holder[0].on_button_press(key)
 
     def onTrackSelected(entered: str) -> bool:
+        if playlist is None:
+            coordinator.add_message(
+                "Playlist", "no playlist from mac",
+                ttl_s=NO_PLAYLIST_FEEDBACK_DURATION_S, display_s=NO_PLAYLIST_FEEDBACK_DURATION_S,
+            )
+            return False
         number = int(entered)
         immediate = number in IMMEDIATE_PLAY_RANGE
         offset = IMMEDIATE_PLAY_INDEX_OFFSET if immediate else TRACK_INDEX_OFFSET
-        track = playlist.get_by_index(number - offset) if playlist is not None else None
+        track = playlist.get_by_index(number - offset)
         if track is None:
             logger.info(f"No playlist track matches selection {entered}")
             return False
@@ -176,15 +190,18 @@ def main(config_path=None):
         error_text=feedback_config.error_text,
         error_duration_s=feedback_config.error_duration_s,
         flash_interval_s=pause_flash_config.flash_interval_s,
+        get_invalid_feedback=lambda: (
+            (NO_PLAYLIST_PANEL_TEXT, NO_PLAYLIST_FEEDBACK_DURATION_S) if playlist is None else None
+        ),
     )
     coordinator_holder.append(coordinator)
 
-    try:
-        playlist = Playlist(path=config.playlist_path())
-    except Exception as e:
-        logger.error(f"Failed to load playlist: {e}")
-        coordinator.add_message("Error", "Playlist load failed", ttl_s=0, display_s=5)
-        playlist = None
+    # Fetched from the Mac over SSH once it connects (see loadPlaylistFromMac
+    # below) rather than loaded from a bundled file -- the Pi's filesystem is
+    # read-only, so there's no way to keep a local copy in sync with the
+    # Mac's actual "Jukebox" playlist. None until that first fetch succeeds;
+    # onTrackSelected/onTrackIdChanged already treat that as "no match".
+    playlist = None
 
     led_artist_observer = SingleTextLineAnimatedObserver(driver=led0, event_type=UpdateEventType.ARTIST)
     apply_animation_config(led_artist_observer, config)
@@ -394,6 +411,36 @@ def main(config_path=None):
     )
     source.start()
 
+    def loadPlaylistFromMac() -> None:
+        # Guarded by "already loaded" rather than "already attempted": a
+        # transient failure on this (the first) connection should still be
+        # retried on the next reconnect, but once a fetch actually
+        # succeeds, later reconnects leave it alone -- matches
+        # sshWorker.playlist_name's "fetch once per process" semantics
+        # without a separate one-shot flag. Runs on the SSH worker's own
+        # background connect-loop thread, so blocking here for the several
+        # seconds a full playlist enumeration can take is safe -- same
+        # reasoning already documented for runAirplayRecovery/
+        # fetchNowPlayingFromMac.
+        nonlocal playlist
+        if playlist is not None:
+            return
+        try:
+            result = ssh_worker.get_playlist_tracks()
+        except ConnectionError as e:
+            logger.error("Could not load playlist over SSH: %s", e)
+            return
+        if not result.ok:
+            logger.error("get_playlist_tracks.js failed: %s", (result.stdout or result.stderr).strip())
+            return
+        try:
+            raw_tracks = json.loads(result.stdout)
+        except ValueError:
+            logger.error("get_playlist_tracks.js returned unparseable output: %r", result.stdout)
+            return
+        playlist = Playlist(raw_tracks)
+        logger.info("Loaded %d playlist track(s) from the Mac", len(playlist))
+
     ssh_worker_config = config.ssh_worker()
     ssh_worker = None
     if ssh_worker_config is not None:
@@ -408,6 +455,7 @@ def main(config_path=None):
             strict_host_key_checking=ssh_worker_config.strict_host_key_checking,
             airplay_device_name=ssh_worker_config.airplay_device_name,
             playlist_name=ssh_worker_config.playlist_name,
+            on_connection_established=loadPlaylistFromMac,
         )
         ssh_worker.start()
 

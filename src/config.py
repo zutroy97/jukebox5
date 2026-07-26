@@ -93,7 +93,6 @@ class Config:
       - `jukeboxPanel`: has a single `option` key naming which of the
         `jukeboxPanel<n>` sections is active.
       - `mqtt`: shairport-sync MQTT broker connection settings.
-      - `playlist`: optional override path for the playlist JSON file.
       - `display`: has a `fields` key listing which song fields (artist,
         title, album) to cycle through on the animated displays, and in
         what order.
@@ -207,11 +206,6 @@ class Config:
             recovery_attempts=section.getint("recovery_attempts", fallback=3),
             recovery_retry_delay_s=section.getfloat("recovery_retry_delay_s", fallback=5.0),
         )
-
-    def playlist_path(self) -> Optional[str]:
-        if "playlist" not in self._parser:
-            return None
-        return self._parser["playlist"].get("path") or None
 
     def display_fields(self) -> list:
         if "display" not in self._parser:

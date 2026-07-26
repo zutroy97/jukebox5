@@ -618,7 +618,13 @@ an exact match, the corresponding remote-control command is dispatched
   segment-reveal here would blur a crisp blink into a smear.
 - **Invalid**: a fixed error string ("Err" by default) is shown, padded
   to 4 characters, for a configurable duration (default 2 seconds), also
-  not animated.
+  not animated. Track-selection invalid feedback has one override: if the
+  playlist hasn't been fetched from the Mac yet at all (§10), the panel
+  instead shows "----" for 5 seconds, and the alpha display shows a "no
+  playlist from mac" status message for the same 5 seconds — distinct
+  from an ordinary out-of-range code, which still gets the standard "Err".
+  Command-entry's invalid feedback is never affected by this, regardless
+  of playlist state.
 - Input is ignored entirely while this feedback sequence is playing out.
 - Once feedback finishes (or an entry is cancelled via `R`, or times out
   with nothing typed at all), the left LED turns off, and the 4-digit
@@ -744,22 +750,37 @@ otherwise becomes a real risk across quick process restarts.
 
 ## 10. Playlist
 
-A local, static playlist — a JSON file, an array of objects each with
+An in-memory snapshot of the Mac's Music.app "Jukebox" playlist (the same
+playlist the `[sshWorker]` config section's `playlist_name` setting names),
+fetched over a persistent SSH link to that Mac (`MusicAppSSHWorker`,
+`src/music_app_ssh_worker.py`) rather than read from a bundled file — the
+device's filesystem is read-only, so there's no way to keep an on-disk copy
+in sync with changes made in Music.app. That same SSH link is also used for
+other Mac-side automation not otherwise covered in this document (AirPlay
+recovery, now-playing lookups) — see `src/music_app_ssh_worker.py` and
+`src/osx/scripts/` for specifics. Each entry has
 (at minimum) a name, a numeric index, an artist, and a "persistent ID"
-string (matched case-insensitively/uppercased against shairport-sync's
-own per-track persistent ID metadata). Loaded once at startup; two
-lookups are needed:
+string (matched case-insensitively/uppercased against shairport-sync's own
+per-track persistent ID metadata). Fetched once, the first time the SSH
+connection comes up (not re-fetched on later reconnects, so a playlist
+edited in Music.app after that first fetch won't be picked up without
+restarting the jukebox process); a fetch that fails (SSH not yet connected,
+scripting error, unparseable output) is silently retried on the next
+reconnect. Two lookups are needed:
 - by numeric index (used to resolve a 3-digit keypad selection, after
   subtracting the range-dependent offset described in §7, to an actual
   track to queue or immediate-play)
 - by persistent ID (used to resolve an incoming "now playing" track back
   to its playlist index, for §8.1's 4-digit display and right-LED logic)
 
-If the playlist fails to load at startup, the app continues running
-(display features degrade gracefully — keypad track-selection always
-reports "no match," but everything else still works) and a one-time
-"Error: Playlist load failed" status message is shown per §6.5's
-mechanism.
+Until the first fetch succeeds (including if `sshWorker` isn't configured
+at all, so no fetch is ever attempted), the playlist is treated as absent:
+keypad track-selection reports "no match" via §7's "----"/"no playlist
+from mac" feedback rather than the standard "Err". `Playlist.from_file()`
+(playlist.py) still exists for local development without a reachable Mac —
+point it at your own JSON fixture in the same shape
+get_playlist_tracks.js returns — but the running app doesn't use it by
+default.
 
 ---
 

@@ -13,6 +13,7 @@ import paramiko
 _OSX_SCRIPTS_DIR = Path(__file__).parent / "osx" / "scripts"
 _RECOVER_AIRPLAY_PLAYBACK_SCRIPT_PATH = _OSX_SCRIPTS_DIR / "recover_airplay_playback.js"
 _GET_NOW_PLAYING_SCRIPT_PATH = _OSX_SCRIPTS_DIR / "get_now_playing.js"
+_GET_PLAYLIST_TRACKS_SCRIPT_PATH = _OSX_SCRIPTS_DIR / "get_playlist_tracks.js"
 # Include the surrounding quotes from the .js file's dummy string literals
 # (e.g. `"__AIRPLAY_DEVICE_NAME__"`) so the whole literal -- quotes and all
 # -- gets replaced by json.dumps(...)'s own quoting, rather than nesting one
@@ -36,10 +37,10 @@ class MusicAppSSHWorker:
     """Maintains a persistent SSH connection (authenticated via a private
     key, never a password) to the machine running the macOS "Music"
     application, so the jukebox can run commands there that shairport-sync's
-    own MQTT metadata has no equivalent for (currently just
-    recover_airplay_playback() -- JavaScript for Automation/`osascript`
-    automation of the Music app itself, piped in over the connection rather
-    than run from a file on the remote machine).
+    own MQTT metadata has no equivalent for -- recover_airplay_playback(),
+    get_now_playing(), get_playlist_tracks() -- all JavaScript for
+    Automation/`osascript` automation of the Music app itself, piped in
+    over the connection rather than run from a file on the remote machine.
 
     Mirrors ShairportSyncMQTTSource's connection-lifecycle shape: a
     background thread holds one connection at a time, a keepalive keeps it
@@ -86,6 +87,7 @@ class MusicAppSSHWorker:
         self._playlist_name = playlist_name
         self._recover_airplay_playback_script_template = _RECOVER_AIRPLAY_PLAYBACK_SCRIPT_PATH.read_text()
         self._get_now_playing_script = _GET_NOW_PLAYING_SCRIPT_PATH.read_text()
+        self._get_playlist_tracks_script_template = _GET_PLAYLIST_TRACKS_SCRIPT_PATH.read_text()
         self._on_connection_lost = on_connection_lost
         self._on_connection_established = on_connection_established
 
@@ -166,6 +168,26 @@ class MusicAppSSHWorker:
         caller. Raises ConnectionError (via execute()) if the SSH session
         is not currently up."""
         encoded = base64.b64encode(self._get_now_playing_script.encode()).decode()
+        command = f"echo {encoded} | base64 -d | osascript -l JavaScript"
+        return self.execute(command, timeout_s=timeout_s)
+
+    def get_playlist_tracks(self, timeout_s: Optional[float] = 60.0) -> CommandResult:
+        """Run src/osx/scripts/get_playlist_tracks.js on the remote machine
+        (as JavaScript for Automation, via osascript) to enumerate
+        playlist_name's tracks in the Music app -- the live replacement for
+        a bundled, manually-maintained playlist file (see Playlist in
+        playlist.py).
+
+        stdout is a JSON array of {"Name", "Index", "Artist",
+        "PersistentID"} objects on success, one per track in playlist
+        order, and can be passed straight to Playlist(). Longer default
+        timeout than the other scripts here since this enumerates every
+        track in the playlist rather than doing a single lookup. Raises ConnectionError
+        (via execute()) if the SSH session is not currently up."""
+        script = self._get_playlist_tracks_script_template.replace(
+            _PLAYLIST_NAME_PLACEHOLDER, json.dumps(self._playlist_name)
+        )
+        encoded = base64.b64encode(script.encode()).decode()
         command = f"echo {encoded} | base64 -d | osascript -l JavaScript"
         return self.execute(command, timeout_s=timeout_s)
 
