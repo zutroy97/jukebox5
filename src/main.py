@@ -35,12 +35,13 @@ IMMEDIATE_PLAY_INDEX_OFFSET = 300
 # How long the Pi's IP address stays in the display rotation after P911.
 SHOW_IP_ADDRESS_TTL_S = 30.0
 
-# How long to wait after the MQTT connection first comes up for some sign of
-# an already-active shairport-sync session (a song-changed or play_resume
-# event) before concluding nothing is playing and running the AirPlay
-# recovery script. Only checked once, at startup -- not on later
-# reconnects, which don't imply playback actually stopped.
-STARTUP_NOTHING_PLAYING_GRACE_S = 5.0
+# How long to wait for some sign of active shairport-sync playback (a
+# song-changed or play_resume event) before concluding nothing is playing.
+# Used both at startup (before running the AirPlay recovery script) and
+# after an active_end event (before asking the Mac directly whether
+# there's actually a track playing shairport-sync just didn't announce --
+# see onActiveEnd/fetchNowPlayingFromMac).
+NOTHING_PLAYING_GRACE_S = 5.0
 
 led0 = ldisp.led16_display(addr=(0x70, 0x71))
 led1 = ldisp.led16_display(addr=(0x72, 0x73, 0x74))
@@ -236,6 +237,27 @@ def main(config_path=None):
 
     def onActiveEnd():
         coordinator.clear_for_inactive()
+        # A session can end and immediately resume the *same* track (e.g.
+        # shairport-sync itself restarting mid-track, as opposed to
+        # playback genuinely stopping) -- shairport-sync has no new
+        # artist/title/track_id to publish for that, since as far as its
+        # own metadata stream is concerned no track boundary was crossed,
+        # so the display would otherwise stay blank indefinitely even
+        # though audio is streaming again. Check once, after the grace
+        # period, whether shairport-sync told us anything on its own in
+        # the meantime (playback_event_generation covers pause/resume/song
+        # changes); if not, ask the Mac directly -- same fallback startup
+        # already uses, just read-only here (no recovery script) since
+        # active_end is a normal, frequent event and most of the time
+        # nothing actually is playing.
+        observed_generation = playback_event_generation[0]
+
+        def checkResumedWithoutMetadata():
+            if playback_event_generation[0] != observed_generation:
+                return
+            fetchNowPlayingFromMac()
+
+        threading.Timer(NOTHING_PLAYING_GRACE_S, checkResumedWithoutMetadata).start()
 
     # The recovery script's own success sentinel (see the return "OK" line
     # in src/osx/scripts/recover_airplay_playback.js) -- osascript's exit
@@ -291,6 +313,7 @@ def main(config_path=None):
 
     def onSongChanged(artist: str, song_title: str, album: str = "") -> None:
         startup_playback_seen[0] = True
+        playback_event_generation[0] += 1
         coordinator.remove_message("Error")
         coordinator.update_song_info(artist, song_title, album)
 
@@ -300,15 +323,17 @@ def main(config_path=None):
         onPlaybackResumed()
 
     def fetchNowPlayingFromMac() -> bool:
-        """Startup-only fallback for a track that was already playing
-        before this process (re)started: shairport-sync only publishes
-        artist/title/album/track_id once, at track start, with no retained
-        message a late MQTT subscription can catch up on -- so a track
-        already mid-playback stays invisible on the display until the
-        *next* track change, even though playback itself never stopped.
-        Ask the Mac directly instead. Returns True if a currently-playing
-        track was found and the display was updated from it, so the
-        caller can skip the "nothing playing" AirPlay-recovery path."""
+        """Fallback for a track that's playing on the Mac without
+        shairport-sync having told us: it only publishes artist/title/
+        album/track_id once, at track start, with no retained message a
+        late/resumed MQTT subscription can catch up on -- so a track
+        already mid-playback (at this process's own startup, or after
+        shairport-sync's session restarts mid-track -- see
+        checkStartupPlayback/onActiveEnd) stays invisible on the display
+        until the *next* track change, even though playback itself never
+        stopped. Ask the Mac directly instead. Returns True if a
+        currently-playing track was found and the display was updated
+        from it."""
         if ssh_worker is None:
             return False
         try:
@@ -332,7 +357,7 @@ def main(config_path=None):
         if not (artist and title):
             return False
 
-        logger.warning("Found already-playing track via SSH at startup: %r -- %r", artist, title)
+        logger.warning("Found already-playing track via SSH: %r -- %r", artist, title)
         persistent_id = info.get("persistentID")
         if persistent_id:
             onTrackIdChanged(persistent_id.upper())
@@ -350,7 +375,7 @@ def main(config_path=None):
         onConnectionEstablished()
         if not startup_check_scheduled[0]:
             startup_check_scheduled[0] = True
-            threading.Timer(STARTUP_NOTHING_PLAYING_GRACE_S, checkStartupPlayback).start()
+            threading.Timer(NOTHING_PLAYING_GRACE_S, checkStartupPlayback).start()
 
     source = ShairportSyncMQTTSource(
         on_song_changed=onSongChanged,
