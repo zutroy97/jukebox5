@@ -18,10 +18,14 @@ class AbstractCharacterRevealAnimator(ABC):
     AbstractClearTextAnimator/ClearDisplayAnimation's existing pattern."""
 
     @abstractmethod
-    def Start(self, observer: "SingleTextLineAnimatedObserver", pos: int, char: str) -> bool:
-        """Begin rendering `char` at `pos`. Returns True if the render
-        completed synchronously (caller can move on immediately), False if
-        it needs further Handle() calls to finish."""
+    def Start(self, observer: "SingleTextLineAnimatedObserver", pos: int, char: str, dp: bool = False) -> bool:
+        """Begin rendering `char` at `pos`, also lighting the decimal-point
+        segment on that same cell if dp is True (see
+        animations.text.period_fold.fold_periods -- pos/char/dp always
+        describe one already-folded display cell, never a literal '.').
+        Returns True if the render completed synchronously (caller can
+        move on immediately), False if it needs further Handle() calls to
+        finish."""
         raise NotImplementedError()
 
     @abstractmethod
@@ -36,8 +40,8 @@ class CharacterRevealImmediatelyAnimator(AbstractCharacterRevealAnimator):
     behavior, unchanged for any observer that doesn't opt into something
     else."""
 
-    def Start(self, observer: "SingleTextLineAnimatedObserver", pos: int, char: str) -> bool:
-        observer.DisplayDriver.write_at_position(pos, char)
+    def Start(self, observer: "SingleTextLineAnimatedObserver", pos: int, char: str, dp: bool = False) -> bool:
+        observer.DisplayDriver.write_at_position(pos, char, dp=dp)
         return True
 
     def Handle(self, observer: "SingleTextLineAnimatedObserver") -> bool:
@@ -66,15 +70,17 @@ class SegmentByCharacterRevealAnimator(AbstractCharacterRevealAnimator):
         self._remaining_bits: list[int] = []
         self._next_tick = 0.0
 
-    def Start(self, observer: "SingleTextLineAnimatedObserver", pos: int, char: str) -> bool:
+    def Start(self, observer: "SingleTextLineAnimatedObserver", pos: int, char: str, dp: bool = False) -> bool:
         # Local import to avoid a hard dependency from the base animations
         # package on the led_16 subpackage for observers that never use
         # this animator.
-        from .led_16.abstract_led16_animator import AbstractLED16Animator
+        from .led_16.abstract_led16_animator import AbstractLED16Animator, DECIMAL_POINT_BIT
 
         self._pos = pos
         self._current = 0
         target = AbstractLED16Animator.get_char_pattern(char)
+        if dp:
+            target |= DECIMAL_POINT_BIT
         self._remaining_bits = [b for b in range(16) if target & (1 << b)]
 
         seg = observer.DisplayDriver.Seg14x4

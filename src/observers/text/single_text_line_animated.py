@@ -32,7 +32,7 @@ class SingleTextLineAnimatedObserver(SingleLineAnimatedObserverBase):
         # (the animators driving _line_animation produce one new character
         # per tick), but is handled as a queue in case more than one
         # position ever changes in the same tick.
-        self._pending_character_writes: list[tuple[int, str]] = []
+        self._pending_character_writes: list[tuple[int, str, bool]] = []
 
     def next_wakeup(self) -> Optional[float]:
         # During clear animation, sleep until the animator's next tick.
@@ -50,8 +50,8 @@ class SingleTextLineAnimatedObserver(SingleLineAnimatedObserverBase):
             return 0.0
         return super().next_wakeup()
 
-    def on_character_write(self, pos: int, c: str) -> bool:
-        return self._characterRevealAnimation.Start(self, pos, c)
+    def on_character_write(self, pos: int, c: str, dp: bool = False) -> bool:
+        return self._characterRevealAnimation.Start(self, pos, c, dp)
 
     def clear_display(self) -> None:
         self._state = ObserverStates.DISPLAY_CLEARING_START
@@ -100,7 +100,8 @@ class SingleTextLineAnimatedObserver(SingleLineAnimatedObserverBase):
             self._advance_past_current_line()
             return
         text = self._line_animation.GetText()
-        self._pending_character_writes = self._diff.getDiff(text)
+        dp_flags = self._line_animation.GetDpFlags()
+        self._pending_character_writes = self._diff.getDiff(text, dp_flags)
         self._advance_character_writes()
 
     def _advance_character_writes(self) -> None:
@@ -110,8 +111,8 @@ class SingleTextLineAnimatedObserver(SingleLineAnimatedObserverBase):
         like the base class's default on_state_animating() did for an
         instant write.'''
         while self._pending_character_writes:
-            pos, c = self._pending_character_writes[0]
-            if not self.on_character_write(pos, c):
+            pos, c, dp = self._pending_character_writes[0]
+            if not self.on_character_write(pos, c, dp):
                 self._state = ObserverStates.CHARACTER_REVEALING
                 return
             self._pending_character_writes.pop(0)

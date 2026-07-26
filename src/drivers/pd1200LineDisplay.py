@@ -34,8 +34,10 @@ class pd1200LineDisplay(abstract_line_display.AbstractSingleLineDisplay):
     def set_position(self, position: int):
         self._position = position
 
-    def write_at_position(self, position: int, text: str):
-        '''Write text to the display at a specific position.'''
+    def write_at_position(self, position: int, text: str, dp: bool = False):
+        '''Write text to the display at a specific position. dp is
+        ignored -- this display type has no per-cell decimal-point
+        segment.'''
         with self._driver.Lock:
             self.set_position(position)
             self.write(text=text)

@@ -52,6 +52,22 @@ class led16_display(abstract_line_display.AbstractSingleLineDisplay):
             self._position += 1
         self._pending_show = True
 
+    def write_at_position(self, position: int, text: str, dp: bool = False):
+        '''Write text at a specific position, optionally also lighting the
+        decimal-point segment on that same cell. Bypasses write()'s own
+        per-'.' cursor-decrement handling -- by the time a caller reaches
+        this method, any '.'/',' has already been folded upstream (see
+        animations.text.period_fold.fold_periods) into an explicit dp
+        flag rather than a literal character, so there's no cursor
+        adjustment to make here.'''
+        self.set_position(position)
+        self.write(text)
+        if dp and position < self._width:
+            # adafruit's own '.' handling ORs the DP bit into whatever's
+            # already at the given index rather than overwriting it.
+            self._display._put('.', position)
+            self._pending_show = True
+
     def flush(self):
         '''Send buffered changes to the hardware in a single I2C transaction.
         Call once per draw cycle after all write() calls are complete.'''

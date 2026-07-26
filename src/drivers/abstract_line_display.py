@@ -22,7 +22,10 @@ class AbstractSingleLineDisplay(ABC):
         '''Get the width of the display.'''
         pass
 
-    def write_at_position(self, position: int, text: str ):
-        '''Write text to the display at a specific position.'''
+    def write_at_position(self, position: int, text: str, dp: bool = False):
+        '''Write text to the display at a specific position. dp requests
+        the decimal-point segment be lit on that same cell too -- ignored
+        by this default implementation; display types with an actual DP
+        segment (see drivers.led16_display) override it.'''
         self.set_position(position)
         self.write(text)

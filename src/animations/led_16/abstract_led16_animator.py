@@ -9,7 +9,7 @@ from ..abstract_animator import AbstractAnimator
 # segment word. The adafruit library's _put() method handles '.' by ORing
 # this bit into the PREVIOUS character rather than advancing the cursor —
 # we replicate that here so get_char_pattern callers can use the same logic.
-_DECIMAL_POINT_BIT = 0x4000
+DECIMAL_POINT_BIT = 0x4000
 
 
 class AbstractLED16Animator(AbstractAnimator):
@@ -21,7 +21,7 @@ class AbstractLED16Animator(AbstractAnimator):
         '''Converts a character to a 16-bit segment bitmask for a 14-segment display.
 
         Decimal points and commas are handled as follows:
-          '.'  — returns _DECIMAL_POINT_BIT (0x4000). The CALLER is responsible
+          '.'  — returns DECIMAL_POINT_BIT (0x4000). The CALLER is responsible
                  for ORing this into the bitmask of the preceding character rather
                  than placing it in its own display position, matching the behaviour
                  of adafruit_ht16k33 Seg14x4._put().
@@ -32,7 +32,7 @@ class AbstractLED16Animator(AbstractAnimator):
         (blank segment).
         '''
         if char == '.' or char == ',':
-            return _DECIMAL_POINT_BIT
+            return DECIMAL_POINT_BIT
 
         if not 32 <= ord(char) <= 127:
             return 0
@@ -53,9 +53,9 @@ class AbstractLED16Animator(AbstractAnimator):
         masks: list[int] = []
         for ch in s:
             pattern = AbstractLED16Animator.get_char_pattern(ch)
-            if pattern == _DECIMAL_POINT_BIT and masks:
+            if pattern == DECIMAL_POINT_BIT and masks:
                 # Fold the decimal point into the preceding character.
-                masks[-1] |= _DECIMAL_POINT_BIT
+                masks[-1] |= DECIMAL_POINT_BIT
             else:
                 masks.append(pattern)
         return masks

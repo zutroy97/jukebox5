@@ -2,7 +2,7 @@ import time
 from abc import abstractmethod
 from typing import Optional
 
-from animations import AbstractTextAnimator, MultiLineGenerator, Slide, TextDiff
+from animations import AbstractTextAnimator, MultiLineGenerator, Slide, TextDiff, fold_periods
 from observer_states import ObserverStates
 
 from .observer_base import UpdateEventType, ObserverBase
@@ -72,6 +72,9 @@ class SingleLineAnimatedObserverBase(ObserverBase):
 
         self._event_type: UpdateEventType = kwargs['event_type']
         self._text: str = ""
+        # Parallel to self._text -- see animations.text.period_fold.fold_periods,
+        # which is what populates this whenever Value is set.
+        self._dp_flags: list[bool] = []
         self._state: ObserverStates = ObserverStates.IDLE
         self._line_animation: AbstractTextAnimator = Slide()
         self._text_generator: MultiLineGenerator = MultiLineGenerator(text="", max_text_width=self.DisplayWidth)
@@ -101,7 +104,7 @@ class SingleLineAnimatedObserverBase(ObserverBase):
     # ------------------------------------------------------------------
 
     @abstractmethod
-    def on_character_write(self, pos: int, c: str) -> bool:
+    def on_character_write(self, pos: int, c: str, dp: bool = False) -> bool:
         raise NotImplementedError()
 
     def clear_display(self) -> None:
@@ -113,8 +116,16 @@ class SingleLineAnimatedObserverBase(ObserverBase):
 
     @Value.setter
     def Value(self, text: str):
-        if text != self._text:
-            self._text = text
+        # Fold '.'/',' into a decimal-point flag on the preceding cell
+        # rather than letting them consume their own -- see
+        # fold_periods()'s docstring. self._text becomes the folded
+        # (shorter) text from here on, which is what makes
+        # on_state_animation_finished()'s "does it already fit" check
+        # below correctly reflect real cell count, not raw character count.
+        folded_text, dp_flags = fold_periods(text)
+        if folded_text != self._text or dp_flags != self._dp_flags:
+            self._text = folded_text
+            self._dp_flags = dp_flags
             self._state = ObserverStates.TEXT_UPDATED
 
     def addTimer(self, from_state: ObserverStates, to_state: ObserverStates, delay_s: float) -> None:
@@ -151,7 +162,9 @@ class SingleLineAnimatedObserverBase(ObserverBase):
     # ------------------------------------------------------------------
 
     def on_state_text_updated(self) -> None:
-        self._text_generator = MultiLineGenerator(text=self._text, max_text_width=self.DisplayWidth)
+        self._text_generator = MultiLineGenerator(
+            text=self._text, dp_flags=self._dp_flags, max_text_width=self.DisplayWidth,
+        )
         self._text_generator.Start()
         self._state = ObserverStates.START_ANIMATION
 
@@ -168,8 +181,9 @@ class SingleLineAnimatedObserverBase(ObserverBase):
             self._advance_past_current_line()
             return
         text = self._line_animation.GetText()
-        for pos, c in self._diff.getDiff(text):
-            self.on_character_write(pos, c)
+        dp_flags = self._line_animation.GetDpFlags()
+        for pos, c, dp in self._diff.getDiff(text, dp_flags):
+            self.on_character_write(pos, c, dp)
         self._schedule_character_delay()
 
     def on_state_animation_line_finished(self) -> None:
@@ -275,8 +289,10 @@ class SingleLineAnimatedObserverBase(ObserverBase):
     def _createAnimation(self) -> None:
         """Fetch the next line from the generator and start the character animator."""
         initial_text = ''
+        initial_dp_flags: list[bool] = []
         if self._text_generator.Next():
             initial_text = self._text_generator.GetText()
+            initial_dp_flags = self._text_generator.GetDpFlags()
         self._line_animation.max_text_width = self.DisplayWidth
-        self._line_animation.StartWithText(initial_text)
+        self._line_animation.StartWithText(initial_text, dp_flags=initial_dp_flags)
         self._diff = TextDiff()
