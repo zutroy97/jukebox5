@@ -547,15 +547,33 @@ progress.
   - `PP` → play/pause toggle
   - `P111` → previous item
   - `P666` → next item
-  - the moment the accumulated sequence exactly matches a known command,
-    it fires immediately (no need to wait for a timeout or a fixed
-    length) and the entry ends;
+  - `P222` → **local-only**: skip the alpha display (§6.5) immediately to
+    its next rotation item (song field or active status message),
+    without touching playback or MQTT at all
+  - `P911` → **local-only**: show the Pi's own LAN IP address in the
+    alpha display's rotation for 30 seconds
+  - the moment the accumulated sequence exactly matches a known command
+    *and* isn't also a prefix of some other, longer command still in the
+    table, it fires immediately (no need to wait for a timeout or a
+    fixed length) and the entry ends. (No pair in the current table is
+    prefix-ambiguous with another — e.g. `PP` and `P222` diverge at the
+    second character — but if one were added, the shorter command would
+    have to wait out the 2-second timeout below before firing, in case
+    the longer one was still being typed.)
   - the moment the accumulated sequence can no longer possibly be a
     prefix of *any* known command, entry ends immediately as invalid —
     no need to wait out the timeout either.
   - A 2-second inactivity timeout between keystrokes (shorter than
     track-selection's, since commands are meant to be typed in one
-    quick burst) cancels the entry if neither condition is hit first.
+    quick burst) cancels the entry if neither condition is hit first —
+    unless the accumulated sequence exactly matches a known command (see
+    above), in which case the timeout fires that command instead of
+    cancelling.
+  - `PP`, `P111`, `P666`, and `queue_next`/`nextitem` (the two remote
+    commands track selection itself can trigger, above) are the only
+    commands actually forwarded to shairport-sync over MQTT (§9); `P222`
+    and `P911` are intercepted before that and handled entirely on this
+    side.
 - Pressing `R` at any time (even mid-entry) immediately cancels/resets
   whatever entry is in progress and returns to idle, discarding it.
 - Any other digit/letter mid-entry that doesn't fit the current mode
@@ -570,13 +588,22 @@ something always means the display briefly stops showing "what's
 currently playing."
 
 **Once track-selection mode completes** (3rd digit typed): the entered
-code is looked up (see §10); if it matches a real playlist entry, that
-track is queued for playback (§9) and this counts as "valid"; otherwise
-it's "invalid" — either way, control passes to the feedback sequence
-below. Note the queued track doesn't actually start playing immediately;
-it takes effect only once shairport-sync reports the new track over MQTT
-some time later, which is why the display doesn't try to show the new
-selection as "now playing" right away.
+3-digit code resolves to a playlist index by subtracting an offset —
+which offset depends on the code's range:
+
+| Code range | Playlist index | Behavior |
+| --- | --- | --- |
+| `300`–`500` | code − 300 | **Immediate play**: queued, then immediately skipped to via a `nextitem` remote command (§9) — interrupts whatever's currently playing. |
+| `100`–`299`, `501`–`999` | code − 100 | Queued behind the current track (`queue_next`, §9) — starts once it ends, doesn't interrupt. |
+
+If the resulting index matches a real playlist entry, this counts as
+"valid"; otherwise it's "invalid" — either way, control passes to the
+feedback sequence below. For the non-immediate range, the queued track
+doesn't actually start playing right away; it takes effect only once
+shairport-sync reports the new track over MQTT some time later, which is
+why the display doesn't try to show the new selection as "now playing"
+right away. The immediate-play range's `nextitem` follow-up shortcuts
+that wait.
 
 **Once command-entry mode resolves** (exact match or dead-end): if it was
 an exact match, the corresponding remote-control command is dispatched
@@ -723,8 +750,8 @@ string (matched case-insensitively/uppercased against shairport-sync's
 own per-track persistent ID metadata). Loaded once at startup; two
 lookups are needed:
 - by numeric index (used to resolve a 3-digit keypad selection, after
-  subtracting the fixed display offset described in §8.1, to an actual
-  track to queue)
+  subtracting the range-dependent offset described in §7, to an actual
+  track to queue or immediate-play)
 - by persistent ID (used to resolve an incoming "now playing" track back
   to its playlist index, for §8.1's 4-digit display and right-LED logic)
 
