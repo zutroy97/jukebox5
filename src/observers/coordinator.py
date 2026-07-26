@@ -20,11 +20,15 @@ class _TrackSelector:
       - 'P'      starts command entry (COMMAND_TIMEOUT_S between
                  keystrokes, shorter -- commands are meant to be entered
                  in one quick burst): subsequent keys are matched against
-                 COMMANDS as they arrive. An exact match fires
-                 immediately (on_command(COMMANDS[entered]) and the valid
-                 feedback below) without waiting for the timeout; a
-                 sequence no full command starts with is invalid
-                 immediately, same idea.
+                 COMMANDS as they arrive. An exact match fires immediately
+                 (on_command(COMMANDS[entered]) and the valid feedback
+                 below) without waiting for the timeout, UNLESS it's also
+                 a prefix of some other, longer command in COMMANDS --
+                 then it's ambiguous and has to wait out COMMAND_TIMEOUT_S
+                 like a partial entry, firing at that point (see
+                 check_timeout()) if nothing longer arrived. A sequence no
+                 full command starts with is invalid immediately, same
+                 idea.
 
     Track selection calls on_selection_complete(entered) once 3 digits are
     in, and its bool return value (True = a real match -- currently a
@@ -48,12 +52,18 @@ class _TrackSelector:
     SELECTION_TIMEOUT_S: float = 10.0
     COMMAND_TIMEOUT_S: float = 2.0
 
-    # Entered sequence (including the leading 'P') -> shairport-sync remote
-    # command name (see ShairportSyncMQTTSource.send_remote_command).
+    # Entered sequence (including the leading 'P') -> command name. Most of
+    # these are shairport-sync remote commands, forwarded as-is to
+    # ShairportSyncMQTTSource.send_remote_command() by main.py's onCommand.
+    # "advance_display" is the one exception -- a local, playback-unrelated
+    # pseudo-command onCommand intercepts before it would otherwise reach
+    # MQTT, routing it to Coordinator.advance_display() instead to skip the
+    # alpha display ahead to its next rotation item on demand.
     COMMANDS: dict[str, str] = {
         "PP": "playpause",
         "P111": "previtem",
         "P666": "nextitem",
+        "P222": "advance_display",
     }
 
     def __init__(
@@ -133,16 +143,26 @@ class _TrackSelector:
             self._start_feedback(entered, is_valid)
             return
 
-        # 'command' mode: fire as soon as there's an exact match, bail out
-        # as soon as no command could possibly match what's typed so far --
-        # no need to wait out the timeout in either case.
+        # 'command' mode: fire as soon as there's an unambiguous exact
+        # match, bail out as soon as no command could possibly match what's
+        # typed so far -- no need to wait out the timeout in either case.
+        # An exact match that's also a prefix of some longer command in
+        # COMMANDS is ambiguous rather than either of those, so it falls
+        # through to just extending _deadline like a partial entry --
+        # check_timeout() resolves it if nothing longer follows. (No such
+        # pair exists in COMMANDS as of this writing -- e.g. "PP" and
+        # "P222" diverge at the second character -- but this stays correct
+        # if one's ever added.)
         command = self.COMMANDS.get(self._digits)
-        if command is not None:
+        is_prefix_of_longer_command = any(
+            c != self._digits and c.startswith(self._digits) for c in self.COMMANDS
+        )
+        if command is not None and not is_prefix_of_longer_command:
             entered = self._digits
             self._finish_entry()
             self._on_command(command)
             self._start_feedback(entered, True)
-        elif not any(c.startswith(self._digits) for c in self.COMMANDS):
+        elif command is None and not is_prefix_of_longer_command:
             entered = self._digits
             self._finish_entry()
             self._start_feedback(entered, False)
@@ -178,8 +198,21 @@ class _TrackSelector:
             return
         if self._feedback_queue:
             self._advance_feedback()
-        else:
-            self._reset()
+            return
+        # An ambiguous exact match (see button_pressed()) that timed out
+        # without anything longer following resolves to that command now
+        # rather than being silently dropped. A partial entry that never
+        # became a full match (no command in COMMANDS) still falls through
+        # to the plain silent _reset() below.
+        if self._mode == 'command':
+            command = self.COMMANDS.get(self._digits)
+            if command is not None:
+                entered = self._digits
+                self._finish_entry()
+                self._on_command(command)
+                self._start_feedback(entered, True)
+                return
+        self._reset()
 
     def _reset(self) -> None:
         self._digits = ""
@@ -282,6 +315,11 @@ class Coordinator:
     def play_ended(self) -> None:
         """Notify observers that playback has stopped and the display should clear."""
         self._enqueue(self._apply_play_ended)
+
+    def advance_display(self) -> None:
+        """Skip immediately to the next item in the display rotation (song
+        field or active message) -- display-only, no effect on playback."""
+        self._enqueue(lambda: self._notify_all(UpdateEventType.ADVANCE_DISPLAY, ''))
 
     def add_message(self, title: str, text: str, ttl_s: float = 0, display_s: float = 5) -> None:
         """Add or update a custom message in the display rotation.

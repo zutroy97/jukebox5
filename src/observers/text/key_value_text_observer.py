@@ -80,6 +80,27 @@ class KeyValueTextObserver(ObserverBase):
         self._value_driver.Value = value
         self._kv_state = _State.ANIMATING
 
+    def _advance_to_next_pair(self) -> bool:
+        """Pop and show the next (label, value) pair, rebuilding the cycle
+        first if it's run out. Used both by draw() once a pair's pause
+        elapses naturally, and by advance_display() to jump ahead early.
+        Returns False (having gone idle instead) if there was nothing left
+        to show -- callers should treat that as "stop, don't draw further"
+        to avoid a driver still holding a stale value overwriting the
+        clear() this just did."""
+        if not self._cycle:
+            self._cycle = self._build_cycle()
+        if not self._cycle:
+            # Nothing left to show (e.g. the last rotation message expired
+            # with no song playing) — go idle until something new arrives.
+            self._go_idle_or_resume_messages()
+            self._key_driver._driver.clear()
+            self._value_driver._driver.clear()
+            return False
+        label, value = self._cycle.pop(0)
+        self._show_pair(label, value)
+        return True
+
     def _update_cycle_entry(self, label: str, value: str) -> None:
         """Update an existing cycle entry in place, or append if not present.
         If value is empty or whitespace, remove the entry from the cycle."""
@@ -139,6 +160,15 @@ class KeyValueTextObserver(ObserverBase):
         self._values["album"] = (album or '').strip()
         if "album" in self._fields:
             self._update_cycle_entry("Album", self._values["album"])
+
+    def advance_display(self) -> None:
+        # Same "pop and show" step draw() takes once a pair's pause
+        # naturally elapses -- just triggered on demand instead, whether
+        # the current pair is still mid-animation or already pausing.
+        # No-op while idle: there's nothing in rotation to advance to.
+        if self._kv_state == _State.IDLE:
+            return
+        self._advance_to_next_pair()
 
     def playback_stopped(self, **kwargs) -> None:
         self._reset_song_and_resume_messages()
@@ -200,17 +230,8 @@ class KeyValueTextObserver(ObserverBase):
         if self._kv_state == _State.PAUSING:
             if time.monotonic() < self._pause_until:
                 return
-            if not self._cycle:
-                self._cycle = self._build_cycle()
-            if not self._cycle:
-                # Nothing left to show (e.g. the last rotation message expired
-                # with no song playing) — go idle until something new arrives.
-                self._go_idle_or_resume_messages()
-                self._key_driver._driver.clear()
-                self._value_driver._driver.clear()
+            if not self._advance_to_next_pair():
                 return
-            label, value = self._cycle.pop(0)
-            self._show_pair(label, value)
 
         self._key_driver.draw()
         self._value_driver.draw()

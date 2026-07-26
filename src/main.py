@@ -1,4 +1,5 @@
 import argparse
+import json
 import time
 import threading
 import logging
@@ -22,6 +23,13 @@ from serial import Serial
 
 
 TRACK_INDEX_OFFSET = 100
+
+# Selecting a number in this range plays that track immediately (queued
+# next, then skipped to right away via a "nextitem" remote command) rather
+# than just queuing it up behind whatever's currently playing -- its own
+# offset into the playlist, independent of TRACK_INDEX_OFFSET above.
+IMMEDIATE_PLAY_RANGE = range(300, 501)
+IMMEDIATE_PLAY_INDEX_OFFSET = 300
 
 # How long to wait after the MQTT connection first comes up for some sign of
 # an already-active shairport-sync session (a song-changed or play_resume
@@ -101,15 +109,34 @@ def main(config_path=None):
             coordinator_holder[0].on_button_press(key)
 
     def onTrackSelected(entered: str) -> bool:
-        track = playlist.get_by_index(int(entered) - TRACK_INDEX_OFFSET) if playlist is not None else None
-        if track is not None:
-            source.queue_next(track.persistent_id)
-        else:
+        number = int(entered)
+        immediate = number in IMMEDIATE_PLAY_RANGE
+        offset = IMMEDIATE_PLAY_INDEX_OFFSET if immediate else TRACK_INDEX_OFFSET
+        track = playlist.get_by_index(number - offset) if playlist is not None else None
+        if track is None:
             logger.info(f"No playlist track matches selection {entered}")
-        return track is not None
+            return False
+        source.queue_next(track.persistent_id)
+        if immediate:
+            source.send_remote_command("nextitem")
+        return True
 
     def onCommand(command: str) -> None:
+        # "advance_display" is a local pseudo-command (see coordinator.py's
+        # COMMANDS) -- display-only, so it's handled here instead of being
+        # forwarded to shairport-sync, which wouldn't recognize it.
+        if command == "advance_display":
+            coordinator.advance_display()
+            return
         source.send_remote_command(command)
+        if command == "playpause":
+            observed_generation = playback_event_generation[0]
+
+            def checkPlaypauseEffect():
+                if playback_event_generation[0] == observed_generation:
+                    runAirplayRecovery("playpause had no effect via shairport-sync")
+
+            threading.Timer(mqtt_config.remote_command_timeout_s, checkPlaypauseEffect).start()
 
     panel = build_panel(config.panel(), onPanelButtonPress)
     feedback_config = config.track_selection_feedback()
@@ -168,10 +195,19 @@ def main(config_path=None):
     def onConnectionEstablished():
         coordinator.remove_message("Problem")
 
+    # Bumped on every play_flush/play_resume MQTT message -- the only
+    # observable proof shairport-sync actually reacted to something,
+    # since its remote-control feature has no per-command ack of its own.
+    # onCommand's playpause-effect check below compares against this to
+    # tell "shairport-sync paused/resumed" apart from "nothing happened".
+    playback_event_generation = [0]
+
     def onPlaybackPaused():
+        playback_event_generation[0] += 1
         coordinator.set_playback_paused(True)
 
     def onPlaybackResumed():
+        playback_event_generation[0] += 1
         coordinator.set_playback_paused(False)
 
     def onActiveEnd():
@@ -239,8 +275,50 @@ def main(config_path=None):
         coordinator.remove_message("Error")
         onPlaybackResumed()
 
+    def fetchNowPlayingFromMac() -> bool:
+        """Startup-only fallback for a track that was already playing
+        before this process (re)started: shairport-sync only publishes
+        artist/title/album/track_id once, at track start, with no retained
+        message a late MQTT subscription can catch up on -- so a track
+        already mid-playback stays invisible on the display until the
+        *next* track change, even though playback itself never stopped.
+        Ask the Mac directly instead. Returns True if a currently-playing
+        track was found and the display was updated from it, so the
+        caller can skip the "nothing playing" AirPlay-recovery path."""
+        if ssh_worker is None:
+            return False
+        try:
+            result = ssh_worker.get_now_playing()
+        except ConnectionError as e:
+            logger.warning("Could not query now-playing track over SSH: %s", e)
+            return False
+        if not result.ok:
+            logger.warning("get_now_playing.js failed: %s", (result.stdout or result.stderr).strip())
+            return False
+        try:
+            info = json.loads(result.stdout)
+        except ValueError:
+            logger.warning("get_now_playing.js returned unparseable output: %r", result.stdout)
+            return False
+
+        if info.get("playerState") != "playing":
+            return False
+        artist = info.get("artist") or ""
+        title = info.get("name") or ""
+        if not (artist and title):
+            return False
+
+        logger.warning("Found already-playing track via SSH at startup: %r -- %r", artist, title)
+        persistent_id = info.get("persistentID")
+        if persistent_id:
+            onTrackIdChanged(persistent_id.upper())
+        onSongChanged(artist, title, info.get("album") or "")
+        return True
+
     def checkStartupPlayback():
         if startup_playback_seen[0]:
+            return
+        if fetchNowPlayingFromMac():
             return
         runAirplayRecovery("Nothing playing via shairport-sync at startup")
 

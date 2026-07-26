@@ -17,6 +17,9 @@ class UpdateEventType(Enum):
     STATE_PLAYBACK_STOPPED = 5
     CUSTOM_MESSAGE = 6
     ALBUM = 7
+    ADVANCE_DISPLAY = 8
+    '''Skip immediately to the next item in the display rotation, without
+    waiting out its normal pause/animation timing.'''
 
 
 @dataclass
@@ -65,6 +68,8 @@ class ObserverBase(ABC):
             self.timeout_expired()
         elif update_type == UpdateEventType.CUSTOM_MESSAGE:
             self._handle_message(**kwargs)
+        elif update_type == UpdateEventType.ADVANCE_DISPLAY:
+            self.advance_display()
 
     # ------------------------------------------------------------------
     # Message rotation — fully handled here so subclasses get it for free.
@@ -151,6 +156,13 @@ class ObserverBase(ABC):
     def timeout_expired(self) -> None:
         '''Called when no event has been received in the timeout period'''
         self._logger.debug("Timeout expired!")
+
+    def advance_display(self) -> None:
+        '''Called to skip immediately to the next item in the display
+        rotation (song field or active message), interrupting whatever's
+        currently showing/animating. No-op by default -- only meaningful
+        for observers that actually rotate through multiple items.'''
+        pass
 
     def shutdown(self, message: str, **kwargs) -> None:
         '''Called when a shutdown event is received'''

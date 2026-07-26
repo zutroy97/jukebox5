@@ -12,6 +12,7 @@ import paramiko
 
 _OSX_SCRIPTS_DIR = Path(__file__).parent / "osx" / "scripts"
 _RECOVER_AIRPLAY_PLAYBACK_SCRIPT_PATH = _OSX_SCRIPTS_DIR / "recover_airplay_playback.js"
+_GET_NOW_PLAYING_SCRIPT_PATH = _OSX_SCRIPTS_DIR / "get_now_playing.js"
 # Include the surrounding quotes from the .js file's dummy string literals
 # (e.g. `"__AIRPLAY_DEVICE_NAME__"`) so the whole literal -- quotes and all
 # -- gets replaced by json.dumps(...)'s own quoting, rather than nesting one
@@ -84,6 +85,7 @@ class MusicAppSSHWorker:
         self._airplay_device_name = airplay_device_name or socket.gethostname()
         self._playlist_name = playlist_name
         self._recover_airplay_playback_script_template = _RECOVER_AIRPLAY_PLAYBACK_SCRIPT_PATH.read_text()
+        self._get_now_playing_script = _GET_NOW_PLAYING_SCRIPT_PATH.read_text()
         self._on_connection_lost = on_connection_lost
         self._on_connection_established = on_connection_established
 
@@ -148,6 +150,22 @@ class MusicAppSSHWorker:
             _PLAYLIST_NAME_PLACEHOLDER, json.dumps(self._playlist_name)
         )
         encoded = base64.b64encode(script.encode()).decode()
+        command = f"echo {encoded} | base64 -d | osascript -l JavaScript"
+        return self.execute(command, timeout_s=timeout_s)
+
+    def get_now_playing(self, timeout_s: Optional[float] = 15.0) -> CommandResult:
+        """Run src/osx/scripts/get_now_playing.js on the remote machine (as
+        JavaScript for Automation, via osascript) to read Music.app's
+        currently loaded track, if any -- a read-only counterpart to
+        recover_airplay_playback(), for when this process needs to know
+        what's already playing rather than to make something play.
+
+        stdout is JSON on success -- {"playerState": ...} alone, or with
+        "name"/"artist"/"album"/"persistentID" added if a track is loaded
+        (see the script for exact shape); parsing it is left to the
+        caller. Raises ConnectionError (via execute()) if the SSH session
+        is not currently up."""
+        encoded = base64.b64encode(self._get_now_playing_script.encode()).decode()
         command = f"echo {encoded} | base64 -d | osascript -l JavaScript"
         return self.execute(command, timeout_s=timeout_s)
 
