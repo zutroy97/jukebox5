@@ -1,0 +1,31 @@
+[Unit]
+Description=Jukebox5 application
+After=network-online.target mosquitto.service
+Wants=network-online.target
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+[Service]
+Type=exec
+User=simonbs
+Group=simonbs
+WorkingDirectory=/home/simonbs/jukebox5/src
+Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/home/simonbs/jukebox5/venv/bin/python3 main.py
+Restart=on-failure
+RestartSec=5s
+
+# Sandboxing rather than a separate Unix user: makes the whole filesystem
+# read-only to this process (independent of whether the underlying disk
+# is actually mounted read-only yet -- see docs/SPECIFICATION.md), with
+# one small tmpfs-backed exception it doesn't currently need but is
+# reserved for future use. The app itself makes no runtime writes today.
+ProtectSystem=strict
+ProtectHome=read-only
+RuntimeDirectory=jukebox
+PrivateTmp=yes
+NoNewPrivileges=yes
+
+[Install]
+WantedBy=multi-user.target
