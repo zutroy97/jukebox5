@@ -1,87 +1,111 @@
 # Porting to an original Raspberry Pi Zero
 
-Status: not started — this is a runbook for when it happens, written from
-investigating the current deployment (a Pi 3 running 64-bit Debian 13
-"trixie", `docs/deployment.md`) against the original Pi Zero's constraints.
-Target hardware: original Pi Zero (single-core ARM11, ARMv6, 32-bit only,
-512MB RAM, **no onboard networking**) + a USB OTG Ethernet adapter (already
-on hand) for connectivity.
+Status: **hardware/dependency layer verified working, panel keypad and
+alpha displays not physically wired up yet.** Device is up as `jukebox0`,
+reachable over SSH (via the OTG Ethernet adapter), with passwordless
+SSH+sudo for `simonbs`. Target hardware: original Pi Zero (single-core
+ARM11, ARMv6, 32-bit only, 512MB RAM, no onboard networking) + a USB OTG
+Ethernet adapter for connectivity. Actual OS: Raspbian (32-bit, trixie),
+kernel `6.18.33+rpt-rpi-v6`.
 
 ## Why this isn't a straight clone of the current setup
 
-- **Architecture**: the current box runs 64-bit Debian (`aarch64`). Original
-  Pi Zero's ARM11 core is ARMv6, 32-bit only — it cannot run `aarch64`
-  binaries at all. Needs actual 32-bit Raspberry Pi OS, not this image.
+- **Architecture**: the Pi 3 box (`docs/deployment.md`) runs 64-bit Debian
+  (`aarch64`). Original Pi Zero's ARM11 core is ARMv6, 32-bit only — it
+  cannot run `aarch64` binaries at all. Needed actual 32-bit Raspberry Pi
+  OS (Raspbian), not that image — confirmed this is what's actually
+  installed on `jukebox0`.
 - **No onboard WiFi/Bluetooth** (that's Zero *W* and later) — the OTG
-  Ethernet adapter is the only way it reaches the MQTT broker, the Mac over
-  SSH, and receives AirPlay traffic in the first place.
-- **`cryptography` (a `paramiko` dependency) needs Rust to build from
-  source** on platforms without a prebuilt wheel — and PyPI doesn't publish
-  wheels for raw `armv6l`, only `armv7l`/`aarch64`. Building a Rust
-  toolchain on a single ARM11 core with 512MB RAM is the single biggest
-  practical risk in this whole port. **Not yet verified**: whether an older
-  `cryptography` version (pre-Rust-requirement, roughly pre-3.4) is
-  compatible with `paramiko==5.0.0` as currently pinned in
-  `src/requirements.txt` — needs testing; may require pinning an older
-  `paramiko` too, or just accepting the Rust build (slow but possible).
+  Ethernet adapter is how it reaches the MQTT broker, the Mac over SSH, and
+  would receive AirPlay traffic. (A USB WiFi dongle also showed up
+  associating in `dmesg` on this particular unit — so it may have both;
+  either way, networking is confirmed working, real internet access
+  included — apt/pip/GitHub all reachable.)
+- **`cryptography` (a `paramiko` dependency) risk — resolved, not just
+  theorized.** The concern was that it needs Rust to build from source
+  without a prebuilt wheel, and PyPI doesn't publish `armv6l` wheels.
+  **Verified this isn't a problem**: Raspbian ships with `piwheels.org`
+  preconfigured as an extra pip index (`/etc/pip.conf`), and it *does*
+  publish prebuilt `linux_armv6l` wheels for `cryptography`, `cffi`,
+  `bcrypt`, and `pynacl` — confirmed by actually installing the pinned
+  `src/requirements.txt` (`paramiko==5.0.0` included) on `jukebox0`: every
+  package installed from a wheel, zero source compilation, ~2m43s total
+  (nearly all of it network download time on a slow link, not CPU). No
+  Rust toolchain needed at all.
 
-## Confirmed portable as-is (verified while investigating, not just assumed)
+## Confirmed portable/working (verified directly on jukebox0, not just assumed)
 
 - `jukeboxPanelModule/` (the keypad kernel driver) uses the generic
   BCM-numbered `gpio_request()` API, not hardcoded memory addresses — same
-  interface across the whole 40-pin Pi lineup. Just needs rebuilding
-  against the Zero's own kernel headers.
+  interface across the whole 40-pin Pi lineup. Built clean with `make`
+  against the already-installed matching kernel headers (no extra headers
+  package needed — see step 4), installed with `sudo make install`,
+  loaded with `modprobe jukebox_panel_bin`, registered
+  `/dev/jukebox_panel_bin` correctly (confirmed in `dmesg`), and opened
+  successfully as `simonbs` once the udev rule/group were in place.
 - I2C/display code (`src/drivers/led16_display.py`) goes through Blinka's
   board-detection layer, not a hardcoded I2C bus number. Confirmed in
   `adafruit_platformdetect/revcodes.py`: "Zero" (`0x09`), "Zero W" (`0x0C`),
   and "Zero 2 W" (`0x12`) are all explicitly recognized revision codes.
+  (Not yet tested against real hardware — displays aren't wired up yet.)
 - Nothing in the app depends on multiple cores — all the threading
   (MQTT/SSH/coordinator) is I/O-bound and cooperative.
+- Python: `jukebox0` already has Python 3.13.5 via apt — same version as
+  the Pi 3 box, no version-pin adjustment needed after all.
 
 ## Steps
 
-1. **Flash 32-bit Raspberry Pi OS** (Lite is fine, headless) — not this
-   box's image. Enable SSH before first boot (`ssh` file on the boot
-   partition, or `raspi-config`).
-2. **Networking via the OTG Ethernet adapter** — should be picked up by the
-   kernel's standard USB Ethernet (CDC-ECM/RNDIS) driver automatically;
-   confirm with `ip addr` after boot. No GPIO/USB contention with the
-   keypad or displays, since those are on the header, not USB.
-3. **Enable I2C**: `sudo raspi-config nonint do_i2c 0`.
-4. **Install build/runtime dependencies**:
-   `sudo apt install -y git python3-venv python3-pip build-essential libssl-dev libffi-dev raspberrypi-kernel-headers i2c-tools`
-5. **Clone the repo** and create the venv, but before installing
-   `src/requirements.txt` as-is, resolve the `cryptography`/Rust question
-   above (test whether an older pin avoids it; fall back to installing
-   `rustup` and letting it build from source if not — budget real time for
-   this, it's slow on this hardware).
-6. **Rebuild and install the kernel module**:
-   `cd jukeboxPanelModule && make && sudo make install` (installs to
-   `/lib/modules/$(uname -r)/extra` + `depmod -a`, per the Makefile).
-   While in there: fix `jukebox-panel.modules-load.conf`, which currently
-   references `jukebox_panel` (the ASCII driver) — `config.ini`'s active
-   selection is the *binary* driver, so it should say `jukebox_panel_bin`
-   instead (a pre-existing inconsistency on the current box too, worth
-   fixing regardless of this port).
-7. **Wire the hardware** — same physical GPIO/I2C wiring as the current
-   box; BCM pin numbering is consistent across the Pi lineup, see
+1. ✅ **Flash 32-bit Raspberry Pi OS** (Raspbian, headless) — done. Hostname
+   `jukebox0`, SSH key auth set up for `simonbs` (both direct from `jukebox4`
+   and via `mbp2017`), passwordless sudo granted.
+2. ✅ **Networking via the OTG Ethernet adapter** — done, confirmed working
+   (apt/pip/GitHub all reachable; also saw a USB WiFi dongle associate in
+   `dmesg` on this unit, so it may have two paths).
+3. ✅ **Enable I2C**: `sudo raspi-config nonint do_i2c 0` — done.
+4. ✅ **Install build/runtime dependencies** — done:
+   `sudo apt install -y git python3-venv python3-pip build-essential libssl-dev libffi-dev i2c-tools`
+   (no separate kernel-headers package needed — `linux-headers-6.18.33+rpt-rpi-v6`
+   matching the running kernel was already installed on this image; the
+   `raspberrypi-kernel-headers` package name from the original plan doesn't
+   exist on this OS release).
+5. ✅ **Clone the repo**, create the venv, install `src/requirements.txt` —
+   done, all packages via prebuilt wheels (see above), verified core imports
+   (`paramiko`, `paho.mqtt`, `busio`/`board`, `adafruit_ht16k33`) all work.
+6. ✅ **Rebuild and install the kernel module** — done:
+   `cd jukeboxPanelModule && make && sudo make install`, then
+   `sudo cp 99-jukebox-panel.rules /etc/udev/rules.d/` +
+   `echo jukebox_panel_bin | sudo tee /etc/modules-load.d/jukebox-panel.conf`.
+   Also fixed `jukebox-panel.modules-load.conf` in the repo itself, which
+   referenced `jukebox_panel` (the ASCII driver) instead of the binary
+   driver `config.ini` actually selects — a real bug, not Zero-specific,
+   now corrected at the source. Confirmed: module loads, registers
+   `/dev/jukebox_panel_bin`, owned `root:gpio` 660 after the udev rule
+   applied (needed a module reload to take effect on an already-loaded
+   module — reapply-on-trigger alone didn't retroactively fix an existing
+   device node's ownership), opens successfully as `simonbs`.
+7. ⬜ **Wire the hardware** — not done yet. Panel keypad and alpha displays
+   not physically connected. Same physical GPIO/I2C wiring as the Pi 3 box
+   applies; BCM pin numbering is consistent across the Pi lineup, see
    `jukeboxPanelModule/WIRING.md`.
-8. **Adapt `src/config.ini`** for the new host: `[mqtt]` broker address
-   (wherever it actually runs — locally on the Zero, or remote), `[sshWorker]`
-   settings unchanged in shape but double-check paths.
-9. **Decide where mosquitto/shairport-sync run** — either also on the Zero
-   (shairport-sync is a well-established target for exactly this hardware)
-   or left on the existing box, with the jukebox app on the Zero talking to
-   them remotely.
-10. **Adapt the systemd unit** (`systemd/jukebox.service`) — the
-    `ProtectSystem=strict`/`ProtectHome=read-only`/volatile-journald
-    approach from `docs/deployment.md` carries over unchanged; just update
-    `User=`/paths for wherever the checkout actually lives on the Zero.
-11. **Watch memory closely once everything's running together** — 512MB
+8. ⬜ **Adapt `src/config.ini`** for the new host — not done yet: `[mqtt]`
+   broker address (wherever it actually runs — locally on the Zero, or
+   remote), `[sshWorker]` settings unchanged in shape but double-check paths.
+9. ⬜ **Decide where mosquitto/shairport-sync run** — not decided yet:
+   either also on the Zero (shairport-sync is a well-established target for
+   exactly this hardware) or left on the existing box, with the jukebox app
+   on the Zero talking to them remotely.
+10. ⬜ **Adapt the systemd unit** (`systemd/jukebox.service`) — not done
+    yet. The `ProtectSystem=strict`/`ProtectHome=read-only`/
+    volatile-journald approach from `docs/deployment.md` should carry over
+    unchanged; just needs `User=`/paths updated for wherever the checkout
+    lives on the Zero (currently `/home/simonbs/jukebox5`, matches the Pi 3
+    layout).
+11. ⬜ **Watch memory closely once everything's running together** — 512MB
     total, shared between the jukebox app, and possibly mosquitto and
     shairport-sync if they're colocated too. The jukebox app alone is tiny
-    (~47MB RSS observed on the current box), but the combined footprint on
-    a Zero hasn't been measured yet.
+    (~47MB RSS observed on the Pi 3), but the combined footprint on the
+    Zero hasn't been measured yet since nothing's running there but the
+    venv/kernel module so far.
 
 ## Explicitly out of scope for this port
 
