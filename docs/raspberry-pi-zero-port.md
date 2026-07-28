@@ -1,7 +1,8 @@
 # Porting to an original Raspberry Pi Zero
 
-Status: **hardware/dependency layer verified working, panel keypad and
-alpha displays not physically wired up yet.** Device is up as `jukebox0`,
+Status: **hardware/dependency layer verified working; alpha displays and
+panel keypad both wired up and verified working (all 12 keys confirmed).**
+Device is up as `jukebox0`,
 reachable over SSH (via the OTG Ethernet adapter), with passwordless
 SSH+sudo for `simonbs`. Target hardware: original Pi Zero (single-core
 ARM11, ARMv6, 32-bit only, 512MB RAM, no onboard networking) + a USB OTG
@@ -43,11 +44,73 @@ kernel `6.18.33+rpt-rpi-v6`.
   loaded with `modprobe jukebox_panel_bin`, registered
   `/dev/jukebox_panel_bin` correctly (confirmed in `dmesg`), and opened
   successfully as `simonbs` once the udev rule/group were in place.
+  **Now wired and verified against real button presses**, using
+  `src/utils/test_keypad.py` (a standalone driver-only test script, no
+  displays/MQTT/coordinator involved): all 12 keys (`0`–`9`, `P`, `R`)
+  decode correctly, including two genuinely separate presses of the same
+  key registering as two distinct, correctly-timed events.
+
+  **Background noise, root-caused**: a persistent signature (`0xfdff`,
+  one bit off from idle on `keypad_in1`/GPIO5) fires continuously
+  regardless of what's wired. Ruled out by direct elimination: the
+  TXS0108E level shifter (swapped for a 10k/18k resistor divider — no
+  change), the mechanical switches (persisted with buttons physically
+  removed entirely), undervoltage (`vcgencmd get_throttled` → `0x0`), and
+  breadboard crosstalk (a pull-up added in `jukebox_panel_bin.c`'s
+  `configure_keypad_input_bias()` made no difference *while* the divider
+  was attached). Root cause confirmed by elimination-of-elimination: with
+  the keypad lines disconnected from the GPIO pins entirely, the noise
+  vanished completely — meaning the divider's own 18kΩ-to-GND leg was
+  the whole time overpowering the Pi's weak internal pull-up (~50–65kΩ)
+  whenever nothing external actively drove the line high. Not a
+  crosstalk/routing issue; a resistor-divider-vs-pull-up mismatch. Worth
+  keeping in mind for the PCB: a plain resistive divider needs a defined
+  idle-high source of its own (or use an active level shifter like the
+  TXS0108E instead), since a weak Pi-side pull-up can't be relied on to
+  win against it.
+
+  **Fixed the real impact, not just the symptom**: the original
+  leading-edge/lockout debounce design used one shared "current value"
+  slot, so the persistent noise could occupy it and block detection of
+  real keypresses on a different signature — measured directly as ~640ms
+  first-press latency and a quick 12-key tap round catching only 8.
+  Rewrote `keypad_scan_thread_fn()` as a rolling-window majority debounce:
+  each raw signature is tracked independently (up to `KEYPAD_MAX_LATCHED`
+  at once) against its own occurrence count in a trailing
+  `keypad_window_ms` window, asserting at `keypad_window_assert_count`
+  occurrences and releasing at `keypad_window_release_count` — so a
+  chronically-noisy signature latches and repeats on its own without
+  starving detection of anything else. All four new parameters
+  (`keypad_window_ms`, `keypad_window_assert_count`,
+  `keypad_window_release_count`, `keypad_repeat_interval_ms`) are
+  live-tunable via sysfs, same as the driver's existing params.
+  `keypad_window_release_count` was bumped live from the default 2 to 4
+  during testing. Built and loaded on `jukebox0`; verified end-to-end
+  with a full 12-key round, each key pressed twice with genuine
+  separation — all 24 presses registered correctly. **Currently
+  uncommitted** in `jukeboxPanelModule/jukebox_panel_bin.c` on both this
+  checkout and `jukebox0`'s (the earlier pull-up change is folded into
+  this same uncommitted diff). `jukeboxPanelModule/jukebox_panel.c` (the
+  dormant ASCII-protocol sibling driver, not currently loaded) has the
+  same underlying design issue and was deliberately left untouched since
+  it's unused.
+
+  Keypad is now on the custom PCB (contacts were being cleaned as of the
+  last test round) rather than the breadboard prototype described above
+  for the level-shifter/divider experiments.
 - I2C/display code (`src/drivers/led16_display.py`) goes through Blinka's
   board-detection layer, not a hardcoded I2C bus number. Confirmed in
   `adafruit_platformdetect/revcodes.py`: "Zero" (`0x09`), "Zero W" (`0x0C`),
   and "Zero 2 W" (`0x12`) are all explicitly recognized revision codes.
-  (Not yet tested against real hardware — displays aren't wired up yet.)
+  **Now verified against real hardware, not just code inspection**:
+  `i2cdetect -y 1` found devices at `0x70`–`0x74`, exactly matching the two
+  `led16_display` instances `main.py` constructs (`addr=(0x70, 0x71)` for
+  the 8-char display, `addr=(0x72, 0x73, 0x74)` for the 12-char display).
+  Ran the actual driver against them (`led16_display(addr=...).write(...)`)
+  and both displays lit up with the expected text, visually confirmed by
+  the user. One unexplained device also showed up at `0x4d` — not used by
+  either display, source unidentified, worth investigating before final
+  wiring.
 - Nothing in the app depends on multiple cores — all the threading
   (MQTT/SSH/coordinator) is I/O-bound and cooperative.
 - Python: `jukebox0` already has Python 3.13.5 via apt — same version as
@@ -61,7 +124,13 @@ kernel `6.18.33+rpt-rpi-v6`.
 2. ✅ **Networking via the OTG Ethernet adapter** — done, confirmed working
    (apt/pip/GitHub all reachable; also saw a USB WiFi dongle associate in
    `dmesg` on this unit, so it may have two paths).
-3. ✅ **Enable I2C**: `sudo raspi-config nonint do_i2c 0` — done.
+3. ✅ **Enable I2C**: `sudo raspi-config nonint do_i2c 0` — done. **Correction:**
+   this step was originally marked done but hadn't actually taken effect —
+   `/boot/firmware/config.txt` still had `dtparam=i2c_arm=on` commented out
+   and `/dev/i2c-1` didn't exist. Re-ran `do_i2c 0` (confirmed via
+   `raspi-config nonint get_i2c` flipping `1`→`0` and the config.txt line
+   getting uncommented) and rebooted; `/dev/i2c-1`/`/dev/i2c-2` exist now
+   and `i2cdetect` sees the displays (see below).
 4. ✅ **Install build/runtime dependencies** — done:
    `sudo apt install -y git python3-venv python3-pip build-essential libssl-dev libffi-dev i2c-tools`
    (no separate kernel-headers package needed — `linux-headers-6.18.33+rpt-rpi-v6`
@@ -83,17 +152,25 @@ kernel `6.18.33+rpt-rpi-v6`.
    applied (needed a module reload to take effect on an already-loaded
    module — reapply-on-trigger alone didn't retroactively fix an existing
    device node's ownership), opens successfully as `simonbs`.
-7. ⬜ **Wire the hardware** — not done yet. Panel keypad and alpha displays
-   not physically connected. Same physical GPIO/I2C wiring as the Pi 3 box
-   applies; BCM pin numbering is consistent across the Pi lineup, see
-   `jukeboxPanelModule/WIRING.md`.
+7. ✅ **Wire the hardware** — done, on the current breadboard prototype.
+   Alpha displays (I2C) and panel keypad (all 12 keys) are both physically
+   connected and verified working for held/well-paced presses (see above
+   for the caveat on quick sequential taps, not yet resolved on this
+   assembly). Same physical GPIO/I2C wiring as the Pi 3 box applies; BCM
+   pin numbering is consistent across the Pi lineup, see
+   `jukeboxPanelModule/WIRING.md`. **A custom PCB is planned to replace
+   this breadboard assembly** — re-verify keypad reliability once it's in.
 8. ⬜ **Adapt `src/config.ini`** for the new host — not done yet: `[mqtt]`
    broker address (wherever it actually runs — locally on the Zero, or
    remote), `[sshWorker]` settings unchanged in shape but double-check paths.
-9. ⬜ **Decide where mosquitto/shairport-sync run** — not decided yet:
-   either also on the Zero (shairport-sync is a well-established target for
-   exactly this hardware) or left on the existing box, with the jukebox app
-   on the Zero talking to them remotely.
+9. 🟡 **Decide where mosquitto/shairport-sync run** — partially done.
+   `mosquitto` (the broker, not just the `libmosquitto1` client lib the
+   app's own dependencies pull in) is now installed on `jukebox0` via
+   `sudo apt install mosquitto`, running (`active`/`enabled`), and
+   verified end-to-end with `mosquitto_pub`/`mosquitto_sub` over loopback.
+   Still open: whether it actually stays local long-term vs. left on the
+   existing box, and `shairport-sync` placement hasn't been decided or
+   installed at all yet.
 10. ⬜ **Adapt the systemd unit** (`systemd/jukebox.service`) — not done
     yet. The `ProtectSystem=strict`/`ProtectHome=read-only`/
     volatile-journald approach from `docs/deployment.md` should carry over

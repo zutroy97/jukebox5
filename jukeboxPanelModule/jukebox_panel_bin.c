@@ -30,6 +30,7 @@
 #include <linux/uaccess.h>
 #include <linux/gpio/consumer.h>
 #include <linux/gpio/machine.h>
+#include <linux/pinctrl/pinconf-generic.h>
 #include <linux/kfifo.h>
 #include <linux/kthread.h>
 #include <linux/mutex.h>
@@ -77,31 +78,31 @@ MODULE_PARM_DESC(gpio_keypad_in0, "BCM GPIO for keypad row input 0 (default 25)"
 module_param(gpio_keypad_in1, int, 0444);
 MODULE_PARM_DESC(gpio_keypad_in1, "BCM GPIO for keypad row input 1 (default 5)");
 
-/* Post-report lockout duration -- see keypad_scan_thread_fn()'s comment
- * for why this is no longer "how long a key must sit still before being
- * reported" (that's keypad_confirm_ms now). Kept as the same name/default
- * since it still serves the same broad purpose (rejecting switch
- * chatter), just at a different point in the state machine. */
-static int keypad_debounce_ms = 50;
-module_param(keypad_debounce_ms, int, 0644);
-MODULE_PARM_DESC(keypad_debounce_ms, "Milliseconds to ignore further signature changes after a press is reported");
+/* Rolling-window majority debounce: replaces the earlier leading-edge/
+ * lockout state machine, which tracked a single shared "current value"
+ * slot -- meaning a persistent noisy signature on one row line (e.g. the
+ * 0xfdff glitch on keypad_in1 documented in
+ * docs/raspberry-pi-zero-port.md) could occupy that slot indefinitely and
+ * block a real keypress on a completely different signature from ever
+ * being detected while it held it. Each raw signature is now tracked
+ * independently against its own recent history (see keypad_scan_thread_fn()
+ * and the ring-buffer helpers above it), so noise on one signature can't
+ * starve detection of a real key on another. */
+static int keypad_window_ms = 50;
+module_param(keypad_window_ms, int, 0644);
+MODULE_PARM_DESC(keypad_window_ms, "Rolling window length in milliseconds over which a signature's occurrences are counted");
 
-/* How long a signature must read consistently before being trusted at
- * all -- just enough to reject single-sample electrical noise, not a full
- * debounce window. See keypad_scan_thread_fn(). */
-static int keypad_confirm_ms = 10;
-module_param(keypad_confirm_ms, int, 0644);
-MODULE_PARM_DESC(keypad_confirm_ms, "Milliseconds a signature must read consistently before being trusted (press or idle)");
+static int keypad_window_assert_count = 6;
+module_param(keypad_window_assert_count, int, 0644);
+MODULE_PARM_DESC(keypad_window_assert_count, "Minimum occurrences of a signature within the window before it's reported as pressed");
 
-/* Safety-net cap on how long the post-report lockout can last waiting for
- * a clean idle read -- see keypad_scan_thread_fn()'s KEYPAD_LOCKED_OUT
- * comment. Must be well above keypad_debounce_ms (the normal-case lockout
- * length) or it would fire before that even elapses. A tap held longer
- * than this will re-fire (loses the "exactly once per press" guarantee
- * for unusually long holds) rather than wedging the whole keypad. */
-static int keypad_rearm_timeout_ms = 300;
-module_param(keypad_rearm_timeout_ms, int, 0644);
-MODULE_PARM_DESC(keypad_rearm_timeout_ms, "Milliseconds after a report to force re-arming even without a confirmed idle read");
+static int keypad_window_release_count = 2;
+module_param(keypad_window_release_count, int, 0644);
+MODULE_PARM_DESC(keypad_window_release_count, "Occurrences at/below which a latched signature releases, allowing it to re-assert later");
+
+static int keypad_repeat_interval_ms = 300;
+module_param(keypad_repeat_interval_ms, int, 0644);
+MODULE_PARM_DESC(keypad_repeat_interval_ms, "Milliseconds between repeat reports while a signature stays latched (held)");
 
 static int keypad_scan_period_ms = 5;
 module_param(keypad_scan_period_ms, int, 0644);
@@ -112,12 +113,12 @@ module_param(bit_delay_us, int, 0644);
 MODULE_PARM_DESC(bit_delay_us, "Microseconds to hold each display clock phase (default 400)");
 
 /* Was a hardcoded 5us #define; raised to a more generous default and made
- * runtime-tunable after 0xfdff (row-input-1 shorted at scan address 1)
- * was observed settling in and passing keypad_debounce_ms as a phantom
- * event after nearly every real keypress -- consistent with the level
- * shifter/matrix bus not having fully settled 5us after the address-0->1
- * transition (the first GPIO edge of the scan, right as data4 flips
- * 0->1) before being sampled. */
+ * runtime-tunable to test whether 0xfdff (persistent glitch on
+ * keypad_in1 at scan address 1, see docs/raspberry-pi-zero-port.md) was
+ * a settle-time issue in the level-shifting circuitry. Tested directly
+ * on jukebox0: a 10x bump (50us -> 500us) made no measurable difference,
+ * so that theory is ruled out -- kept at a generous default anyway since
+ * there's no cost to it, but it isn't fixing anything by itself. */
 static int keypad_settle_us = 50;
 module_param(keypad_settle_us, int, 0644);
 MODULE_PARM_DESC(keypad_settle_us, "Microseconds to wait after driving a scan address before sampling row inputs (default 50)");
@@ -346,75 +347,134 @@ static void queue_button_event(u16 raw)
 	mutex_unlock(&button_fifo_mutex);
 }
 
-/* Debounce state, mirroring jukebox_panel.c's keypad_scan_thread_fn()
- * exactly, just operating on the raw signature instead of a decoded
- * character.
- *
- * Leading-edge/lockout design (changed from an earlier trailing-edge one
- * that required a signature to sit perfectly still for keypad_debounce_ms
- * before reporting it): a worn mechanical switch can bounce -- make,
- * break, make again -- across a span longer than that, which a
- * "must-stay-still" window can miss entirely (never accumulates enough
- * continuous stable time, so the tap is silently dropped even though the
- * switch clearly closed). Reporting instead fires as soon as a non-idle
- * signature reads consistently for just keypad_confirm_ms (long enough to
- * reject single-sample electrical noise, short enough that ongoing bounce
- * doesn't reset it back to zero), then all further signature changes are
- * ignored for keypad_debounce_ms -- covering the rest of that same
- * bounce, including known glitches like 0xfdff's release artifact -- and
- * a new press isn't recognized until the scan reads idle for
- * keypad_confirm_ms too, confirming the key was actually released. */
-static struct task_struct *keypad_thread;
+/* ------------------------------------------------------------------ */
+/* Rolling-window majority debounce.                                    */
+/*                                                                      */
+/* Each raw scan sample is pushed into a ring buffer. A signature is    */
+/* reported as pressed once it accounts for at least                    */
+/* keypad_window_assert_count of the samples within the trailing        */
+/* keypad_window_ms, and then stays "latched" -- auto-repeating every   */
+/* keypad_repeat_interval_ms -- until its occurrence count within that  */
+/* same window falls to keypad_window_release_count or below, at which  */
+/* point it releases and can freshly re-assert (and re-report) later.   */
+/*                                                                      */
+/* Every distinct signature is tracked independently (up to             */
+/* KEYPAD_MAX_LATCHED at once), unlike the single-slot leading-edge/     */
+/* lockout design this replaces -- so a signature that's chronically     */
+/* noisy latches and repeats on its own without blocking detection of   */
+/* a real key on a different signature.                                 */
+/* ------------------------------------------------------------------ */
 
-enum keypad_state { KEYPAD_ARMED, KEYPAD_LOCKED_OUT };
+#define KEYPAD_WINDOW_MAX_SAMPLES 200 /* covers up to 1s at the default 5ms scan period */
+#define KEYPAD_MAX_LATCHED 4
+
+static u16 keypad_sample_ring[KEYPAD_WINDOW_MAX_SAMPLES];
+static unsigned int keypad_sample_ring_pos; /* next write index */
+static bool keypad_sample_ring_full;
+
+static void keypad_sample_push(u16 raw)
+{
+	keypad_sample_ring[keypad_sample_ring_pos] = raw;
+	keypad_sample_ring_pos = (keypad_sample_ring_pos + 1) % KEYPAD_WINDOW_MAX_SAMPLES;
+	if (keypad_sample_ring_pos == 0)
+		keypad_sample_ring_full = true;
+}
+
+/* Counts occurrences of `value` among the most recent `n` samples pushed
+ * (n clamped to however many have actually been pushed so far, so this
+ * stays accurate even before the ring has filled once). */
+static unsigned int keypad_sample_count(u16 value, unsigned int n)
+{
+	unsigned int available = keypad_sample_ring_full ? KEYPAD_WINDOW_MAX_SAMPLES : keypad_sample_ring_pos;
+	unsigned int i, idx, count = 0;
+
+	if (n > available)
+		n = available;
+
+	for (i = 0; i < n; i++) {
+		idx = (keypad_sample_ring_pos + KEYPAD_WINDOW_MAX_SAMPLES - 1 - i) % KEYPAD_WINDOW_MAX_SAMPLES;
+		if (keypad_sample_ring[idx] == value)
+			count++;
+	}
+	return count;
+}
+
+struct keypad_latch {
+	bool in_use;
+	u16 value;
+	unsigned long last_fired;
+};
+
+static struct keypad_latch keypad_latched[KEYPAD_MAX_LATCHED];
+
+static struct task_struct *keypad_thread;
 
 static int keypad_scan_thread_fn(void *unused)
 {
-	enum keypad_state state = KEYPAD_ARMED;
-	u16 last_raw = KEYPAD_IDLE_RAW;
-	unsigned long confirmed_since = jiffies;
-	unsigned long lockout_until = jiffies;
-	unsigned long rearm_deadline = jiffies;
-
 	while (!kthread_should_stop()) {
-		u16 this_raw;
-		bool confirmed;
+		u16 raw;
+		unsigned int window_samples, count;
+		int i, slot;
 
 		mutex_lock(&gpio_mutex);
-		this_raw = scan_keypad_raw();
+		raw = scan_keypad_raw();
 		mutex_unlock(&gpio_mutex);
 
-		if (this_raw != last_raw) {
-			last_raw = this_raw;
-			confirmed_since = jiffies;
-		}
-		confirmed = jiffies_to_msecs(jiffies - confirmed_since) >= keypad_confirm_ms;
+		keypad_sample_push(raw);
 
-		switch (state) {
-		case KEYPAD_ARMED:
-			if (this_raw != KEYPAD_IDLE_RAW && confirmed) {
-				queue_button_event(this_raw);
-				state = KEYPAD_LOCKED_OUT;
-				lockout_until = jiffies + msecs_to_jiffies(keypad_debounce_ms);
-				rearm_deadline = jiffies + msecs_to_jiffies(keypad_rearm_timeout_ms);
+		window_samples = keypad_window_ms / (keypad_scan_period_ms > 0 ? keypad_scan_period_ms : 1);
+		if (window_samples < 1)
+			window_samples = 1;
+		if (window_samples > KEYPAD_WINDOW_MAX_SAMPLES)
+			window_samples = KEYPAD_WINDOW_MAX_SAMPLES;
+
+		/* Assert: does the current reading show up often enough in the
+		 * recent window to trust it -- and if so, either report it
+		 * fresh or auto-repeat it if it's already latched? */
+		if (raw != KEYPAD_IDLE_RAW) {
+			count = keypad_sample_count(raw, window_samples);
+			if (count >= keypad_window_assert_count) {
+				slot = -1;
+				for (i = 0; i < KEYPAD_MAX_LATCHED; i++) {
+					if (keypad_latched[i].in_use && keypad_latched[i].value == raw) {
+						slot = i;
+						break;
+					}
+				}
+				if (slot < 0) {
+					for (i = 0; i < KEYPAD_MAX_LATCHED; i++) {
+						if (!keypad_latched[i].in_use) {
+							slot = i;
+							break;
+						}
+					}
+					if (slot >= 0) {
+						keypad_latched[slot].in_use = true;
+						keypad_latched[slot].value = raw;
+						keypad_latched[slot].last_fired = jiffies;
+						queue_button_event(raw);
+					}
+					/* slot < 0: all latch slots already busy with
+					 * other signatures -- drop silently, same as
+					 * queue_button_event() does when the FIFO
+					 * itself is full. */
+				} else if (jiffies_to_msecs(jiffies - keypad_latched[slot].last_fired) >= keypad_repeat_interval_ms) {
+					keypad_latched[slot].last_fired = jiffies;
+					queue_button_event(raw);
+				}
 			}
-			break;
-		case KEYPAD_LOCKED_OUT:
-			/* Prefer re-arming on a clean, confirmed idle read (the
-			 * common case for a normal tap) -- but never wait past
-			 * rearm_deadline for one, since this panel's raw signal
-			 * apparently never sits perfectly still for confirm_ms on
-			 * its own (observed: constant low-level bounce even with
-			 * nothing intentionally pressed, likely related to the
-			 * undervoltage events also showing up in dmesg). Without
-			 * this fallback, a single noisy read after a report could
-			 * wedge the state machine in LOCKED_OUT permanently. */
-			if (!time_after_eq(jiffies, lockout_until))
-				break;
-			if ((this_raw == KEYPAD_IDLE_RAW && confirmed) ||
-			    time_after_eq(jiffies, rearm_deadline))
-				state = KEYPAD_ARMED;
-			break;
+		}
+
+		/* Release: any latched signature whose occurrence count in the
+		 * current window has fallen to/under the release threshold
+		 * stops being tracked, so it can freshly re-assert (and
+		 * re-report) the next time it crosses the assert threshold. */
+		for (i = 0; i < KEYPAD_MAX_LATCHED; i++) {
+			if (!keypad_latched[i].in_use)
+				continue;
+			count = keypad_sample_count(keypad_latched[i].value, window_samples);
+			if (count <= keypad_window_release_count)
+				keypad_latched[i].in_use = false;
 		}
 
 		msleep_interruptible(keypad_scan_period_ms);
@@ -604,6 +664,34 @@ static struct gpio_pin_setup pin_setups[PIN_COUNT] = {
 
 static struct gpiod_lookup_table *jukebox_lookup;
 
+/* The row-input lines (keypad-in0/keypad-in1) have no external pull --
+ * an open matrix contact (no key pressed at that scan step, or the
+ * keypad disconnected entirely) leaves the pin floating rather than
+ * reading the protocol's expected idle-high (see KEYPAD_IDLE_RAW).
+ * Observed on jukebox0: a floating keypad-in1 read back a stable,
+ * quasi-periodic non-idle signature (0xfdff) even with the mechanical
+ * buttons physically removed -- not bounce, not the level-shifting
+ * circuitry, just an undefined rest state. Pull up so an open contact
+ * always reads a clean, defined high. */
+static int configure_keypad_input_bias(void)
+{
+	int ret;
+
+	ret = gpiod_set_config(desc_keypad_in0, pinconf_to_config_packed(PIN_CONFIG_BIAS_PULL_UP, 1));
+	if (ret) {
+		pr_err("jukebox_panel_bin: failed to enable pull-up on keypad-in0: %d\n", ret);
+		return ret;
+	}
+
+	ret = gpiod_set_config(desc_keypad_in1, pinconf_to_config_packed(PIN_CONFIG_BIAS_PULL_UP, 1));
+	if (ret) {
+		pr_err("jukebox_panel_bin: failed to enable pull-up on keypad-in1: %d\n", ret);
+		return ret;
+	}
+
+	return 0;
+}
+
 /* Builds a gpiod lookup table resolving each pin by (chip label, offset)
  * rather than a legacy global GPIO number, then acquires every descriptor.
  * See the GPIO_CHIP_LABEL comment above for why. */
@@ -640,6 +728,10 @@ static int request_all_gpios(void)
 			goto unwind;
 		}
 	}
+
+	ret = configure_keypad_input_bias();
+	if (ret)
+		goto unwind;
 
 	return 0;
 
