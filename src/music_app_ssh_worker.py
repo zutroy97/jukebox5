@@ -22,6 +22,22 @@ _AIRPLAY_DEVICE_NAME_PLACEHOLDER = '"__AIRPLAY_DEVICE_NAME__"'
 _PLAYLIST_NAME_PLACEHOLDER = '"__PLAYLIST_NAME__"'
 
 
+def default_airplay_device_name() -> str:
+    """Matches shairport-sync's own default AirPlay device name: with
+    general.name left unset in shairport-sync.conf, its default is "%H" --
+    documented (shairport-sync.conf.sample) as "the machine's hostname
+    with the first letter capitalised (ASCII only)". A plain
+    socket.gethostname() does NOT capitalise, so relying on that alone to
+    match "%H" fails silently -- confirmed on jukebox0: AirPlay recovery
+    couldn't find "jukebox0" because the real advertised name was
+    "Jukebox0". Only the first letter changes case here, not
+    str.capitalize(), which would also lowercase the rest of the
+    hostname (irrelevant for an all-lowercase hostname like "jukebox0",
+    but wrong in general)."""
+    hostname = socket.gethostname()
+    return hostname[:1].upper() + hostname[1:]
+
+
 @dataclass(frozen=True)
 class CommandResult:
     exit_status: int
@@ -74,16 +90,17 @@ class MusicAppSSHWorker:
         self._connect_timeout_s = connect_timeout_s
         self._strict_host_key_checking = strict_host_key_checking
         # Name of the AirPlay device recover_airplay_playback() should
-        # select. Defaults to this machine's (the Pi's) own hostname, since
-        # that's what shairport-sync advertises itself as over AirPlay
-        # unless configured otherwise -- unrelated to playlist_name below,
-        # which is a separately-chosen Music.app playlist to start playing
-        # when nothing is already playing. Both vary per jukebox install,
-        # so they're substituted into the script text rather than hardcoded
+        # select. Defaults to this machine's (the Pi's) own hostname with
+        # the first letter capitalised (see default_airplay_device_name())
+        # -- that's what shairport-sync itself advertises unless configured
+        # otherwise -- unrelated to playlist_name below, which is a
+        # separately-chosen Music.app playlist to start playing when
+        # nothing is already playing. Both vary per jukebox install, so
+        # they're substituted into the script text rather than hardcoded
         # there. The script itself is read once, at construction (not
         # per-call), so a missing/unreadable file fails fast at startup
         # instead of hours into runtime, the first time recovery is needed.
-        self._airplay_device_name = airplay_device_name or socket.gethostname()
+        self._airplay_device_name = airplay_device_name or default_airplay_device_name()
         self._playlist_name = playlist_name
         self._recover_airplay_playback_script_template = _RECOVER_AIRPLAY_PLAYBACK_SCRIPT_PATH.read_text()
         self._get_now_playing_script_template = _GET_NOW_PLAYING_SCRIPT_PATH.read_text()

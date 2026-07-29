@@ -1,8 +1,9 @@
 import configparser
 import os
-import socket
 from dataclasses import dataclass, field
 from typing import Optional
+
+from music_app_ssh_worker import default_airplay_device_name
 
 DISPLAY_FIELDS = ("artist", "title", "album")
 
@@ -69,10 +70,11 @@ class SSHWorkerConfig:
     connect_timeout_s: float = 10.0
     strict_host_key_checking: bool = False
     # Name of the AirPlay device the recovery script should select. Defaults
-    # to this machine's own hostname, since that's what shairport-sync
-    # advertises itself as over AirPlay unless configured otherwise --
-    # unrelated to playlist_name below.
-    airplay_device_name: str = field(default_factory=socket.gethostname)
+    # to this machine's own hostname with the first letter capitalised (see
+    # default_airplay_device_name()), matching what shairport-sync itself
+    # advertises unless configured otherwise -- unrelated to playlist_name
+    # below.
+    airplay_device_name: str = field(default_factory=default_airplay_device_name)
     # Music.app playlist the recovery script should start playing if
     # nothing is already playing. An independent setting from
     # airplay_device_name -- don't assume the two match.
@@ -201,7 +203,7 @@ class Config:
             reconnect_delay_s=section.getfloat("reconnect_delay_s", fallback=5.0),
             connect_timeout_s=section.getfloat("connect_timeout_s", fallback=10.0),
             strict_host_key_checking=section.getboolean("strict_host_key_checking", fallback=False),
-            airplay_device_name=section.get("airplay_device_name", fallback=None) or socket.gethostname(),
+            airplay_device_name=section.get("airplay_device_name", fallback=None) or default_airplay_device_name(),
             playlist_name=section.get("playlist_name", fallback="Jukebox"),
             recovery_attempts=section.getint("recovery_attempts", fallback=3),
             recovery_retry_delay_s=section.getfloat("recovery_retry_delay_s", fallback=5.0),
