@@ -88,7 +88,15 @@ MODULE_PARM_DESC(gpio_keypad_in1, "BCM GPIO for keypad row input 1 (default 5)")
  * independently against its own recent history (see keypad_scan_thread_fn()
  * and the ring-buffer helpers above it), so noise on one signature can't
  * starve detection of a real key on another. */
-static int keypad_window_ms = 50;
+/* 170ms, not the more obvious 50 or 150 -- kept proportional to
+ * keypad_scan_period_ms below (170 / 17 = 10 samples in the window,
+ * matching the original 50 / 5 = 10 this replaced) when that was raised
+ * from 5ms to reduce CPU use on the Zero's single ARM11 core. Changing
+ * one without the other shifts how many samples actually fit in the
+ * window relative to keypad_window_assert_count/release_count, which are
+ * themselves tuned assuming a 10-sample window -- see this file's
+ * keypad_scan_thread_fn(). */
+static int keypad_window_ms = 170;
 module_param(keypad_window_ms, int, 0644);
 MODULE_PARM_DESC(keypad_window_ms, "Rolling window length in milliseconds over which a signature's occurrences are counted");
 
@@ -104,7 +112,15 @@ static int keypad_repeat_interval_ms = 300;
 module_param(keypad_repeat_interval_ms, int, 0644);
 MODULE_PARM_DESC(keypad_repeat_interval_ms, "Milliseconds between repeat reports while a signature stays latched (held)");
 
-static int keypad_scan_period_ms = 5;
+/* 17ms rather than the original 5ms -- chosen for ~58.8 scans/sec
+ * (1000/17), close to a requested ~60/sec, trading scan latency for
+ * CPU: keypad_scan_thread_fn()'s per-scan udelay(keypad_settle_us) busy-
+ * waits rather than sleeping (see that delay's own comment for why), so
+ * scanning less often measurably cuts this thread's CPU use on the
+ * Zero's single ARM11 core -- confirmed on jukebox0: ~3.1% at 5ms down to
+ * ~2.2% at 17ms. See keypad_window_ms above for why it was scaled up
+ * alongside this rather than left at its original value. */
+static int keypad_scan_period_ms = 17;
 module_param(keypad_scan_period_ms, int, 0644);
 MODULE_PARM_DESC(keypad_scan_period_ms, "Milliseconds between keypad scans");
 
