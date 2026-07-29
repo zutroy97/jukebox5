@@ -17,7 +17,7 @@ from panel.panel_input_base import JukeboxPanelArduinoSerial
 from panel.jukebox_panel_linux_ascii import JukeboxPanelLinuxAsciiModule
 from panel.jukebox_panel_linux_binary import JukeboxPanelLinuxBinaryModule
 from music_app_ssh_worker import MusicAppSSHWorker, SUCCESS_OUTPUT
-from playlist import Playlist
+from playlist import Playlist, reverse_byte_order
 from shairport_mqtt import ShairportSyncMQTTSource
 
 from serial import Serial
@@ -164,7 +164,14 @@ def main(config_path=None):
                 lambda: ssh_worker.play_track(persistent_id),
             )
         else:
-            source.queue_next(track.persistent_id)
+            # queue_next's <track_id> argument is documented (shairport-sync's
+            # development-branch mqtt.c) as "the hex track_id string as
+            # published by shairport-sync itself" -- i.e. shairport-sync's
+            # own DAAP byte order, not JXA's persistentID() byte order that
+            # track.persistent_id is actually in (see
+            # playlist.reverse_byte_order()'s docstring). Convert before
+            # sending, or this silently references the wrong track.
+            source.queue_next(reverse_byte_order(track.persistent_id))
             if immediate:
                 source.send_remote_command("nextitem")
         return True

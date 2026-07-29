@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from typing import Optional
 
 
-def _reverse_byte_order(hex_id: str) -> str:
+def reverse_byte_order(hex_id: str) -> str:
     """shairport-sync (via the AirPlay/DAAP metadata it relays) reports a
     track's persistent ID in the opposite byte order from Music.app's own
     JXA persistentID() property for that same track -- confirmed
@@ -13,7 +13,16 @@ def _reverse_byte_order(hex_id: str) -> str:
     Zero-pads to 8 bytes (16 hex digits) first, since shairport-sync's hex
     string can be short a leading zero nibble -- whatever formats it on
     that end doesn't zero-pad (observed: a real track_id of
-    "6017692846C2109", only 15 digits)."""
+    "6017692846C2109", only 15 digits).
+
+    Reversing byte-pair order is its own inverse, so this same function
+    converts in both directions: shairport-sync's format -> JXA's (see
+    get_by_shairport_sync_track_id() below) and JXA's -> shairport-sync's
+    (see main.py's onTrackSelected(), which must convert track.persistent_id
+    -- JXA format, from Playlist -- before sending it as the queue_next
+    remote command's argument, since that command's <track_id> is
+    documented as "the hex track_id string as published by shairport-sync
+    itself")."""
     padded = hex_id.upper().zfill(16)
     byte_pairs = [padded[i:i + 2] for i in range(0, 16, 2)]
     return "".join(reversed(byte_pairs))
@@ -71,8 +80,8 @@ class Playlist:
         Not a plain get_by_persistent_id() call -- shairport-sync's ID is
         in the opposite byte order from Music.app's own JXA
         persistentID(), which is what tracks are keyed by here (see
-        _reverse_byte_order())."""
-        return self.get_by_persistent_id(_reverse_byte_order(track_id))
+        reverse_byte_order())."""
+        return self.get_by_persistent_id(reverse_byte_order(track_id))
 
     def __len__(self) -> int:
         return len(self._by_index)
