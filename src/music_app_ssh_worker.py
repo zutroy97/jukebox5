@@ -86,7 +86,7 @@ class MusicAppSSHWorker:
         self._airplay_device_name = airplay_device_name or socket.gethostname()
         self._playlist_name = playlist_name
         self._recover_airplay_playback_script_template = _RECOVER_AIRPLAY_PLAYBACK_SCRIPT_PATH.read_text()
-        self._get_now_playing_script = _GET_NOW_PLAYING_SCRIPT_PATH.read_text()
+        self._get_now_playing_script_template = _GET_NOW_PLAYING_SCRIPT_PATH.read_text()
         self._get_playlist_tracks_script_template = _GET_PLAYLIST_TRACKS_SCRIPT_PATH.read_text()
         self._on_connection_lost = on_connection_lost
         self._on_connection_established = on_connection_established
@@ -162,12 +162,18 @@ class MusicAppSSHWorker:
         recover_airplay_playback(), for when this process needs to know
         what's already playing rather than to make something play.
 
-        stdout is JSON on success -- {"playerState": ...} alone, or with
-        "name"/"artist"/"album"/"persistentID" added if a track is loaded
-        (see the script for exact shape); parsing it is left to the
-        caller. Raises ConnectionError (via execute()) if the SSH session
-        is not currently up."""
-        encoded = base64.b64encode(self._get_now_playing_script.encode()).decode()
+        stdout is JSON on success -- {"playerState": ..., "airplaySelected":
+        bool} alone, or with "name"/"artist"/"album"/"persistentID" added if
+        a track is loaded (see the script for exact shape); parsing it is
+        left to the caller. airplaySelected reflects airplay_device_name
+        specifically -- playerState "playing" alone does not mean this Pi
+        is actually the AirPlay target; Music.app could be playing to a
+        completely different output. Raises ConnectionError (via execute())
+        if the SSH session is not currently up."""
+        script = self._get_now_playing_script_template.replace(
+            _AIRPLAY_DEVICE_NAME_PLACEHOLDER, json.dumps(self._airplay_device_name)
+        )
+        encoded = base64.b64encode(script.encode()).decode()
         command = f"echo {encoded} | base64 -d | osascript -l JavaScript"
         return self.execute(command, timeout_s=timeout_s)
 

@@ -348,9 +348,18 @@ def main(config_path=None):
         shairport-sync's session restarts mid-track -- see
         checkStartupPlayback/onActiveEnd) stays invisible on the display
         until the *next* track change, even though playback itself never
-        stopped. Ask the Mac directly instead. Returns True if a
-        currently-playing track was found and the display was updated
-        from it."""
+        stopped. Ask the Mac directly instead.
+
+        Returns True only if a currently-playing track was found AND this
+        Pi's own AirPlay device is confirmed selected there -- Music.app
+        reporting playerState "playing" alone is not enough: it could be
+        playing to a completely different output while this jukebox has no
+        AirPlay session at all (confirmed as a real gap during the Pi Zero
+        port bring-up -- checkStartupPlayback below was skipping recovery
+        just because *something* was playing on the Mac). The display is
+        still updated cosmetically from whatever's playing either way,
+        since callers that ignore the return value (see onActiveEnd) want
+        that regardless."""
         if ssh_worker is None:
             return False
         try:
@@ -379,7 +388,7 @@ def main(config_path=None):
         if persistent_id:
             onTrackIdChanged(persistent_id.upper())
         onSongChanged(artist, title, info.get("album") or "")
-        return True
+        return bool(info.get("airplaySelected"))
 
     def checkStartupPlayback():
         if startup_playback_seen[0]:
