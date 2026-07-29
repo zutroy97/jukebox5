@@ -727,12 +727,28 @@ already having fired once for the current track, in case the broker
 never publishes `track_id` at all or it arrives out of the expected
 order).
 
-**Remote control**: publishes plain command strings (`playpause`,
-`nextitem`, `previtem`, or an explicit `queue_next <persistent_id>` — the
-exact vocabulary shairport-sync's own remote-control feature accepts) to
-a `/remote` topic under the same base topic, to actually control
-playback on the AirPlay source. This is how §7's keypad commands and
-track-selection queuing take effect.
+**Remote control**: `playpause`, `nextitem`, `previtem`, and "immediate
+play" track selections (§7) are sent as *direct Music.app control* over
+the `[sshWorker]` SSH connection described in §10 (JavaScript for
+Automation — `playpause.js`/`next_track.js`/`previous_track.js`/
+`play_track.js`, run via `MusicAppSSHWorker`) rather than through
+shairport-sync's MQTT remote-control feature.
+This is a deliberate choice, not just a preference: shairport-sync's own
+`/remote` topic (plain command strings, or an explicit
+`queue_next <persistent_id>`) has no acknowledgment of whether a command
+actually reached or took effect on the AirPlay source, and was observed
+failing silently even with a live AirPlay session during real-world use.
+Direct JXA control gives a real exit status instead. If `[sshWorker]`
+isn't configured, these fall back to the `/remote` topic.
+
+The one exception: "queue behind the current track without interrupting
+it" (the non-immediate track-selection range in §7) still goes through
+`/remote`'s `queue_next <persistent_id>`, published to a `/remote` topic
+under the same base topic. This is a genuine AirPlay-remote queue
+operation — Music.app's own "Up Next" queue, which the DACP protocol
+manipulates directly — with no equivalent exposed anywhere in Music.app's
+AppleScript/JXA scripting dictionary, so there's no direct-control
+alternative for this one case.
 
 **Connection lifecycle**: on broker-connect success, subscribes to all
 of the above topics and fires a "connection established" notification

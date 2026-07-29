@@ -16,7 +16,7 @@ from observers import UpdateEventType, Coordinator, SingleTextLineAnimatedObserv
 from panel.panel_input_base import JukeboxPanelArduinoSerial
 from panel.jukebox_panel_linux_ascii import JukeboxPanelLinuxAsciiModule
 from panel.jukebox_panel_linux_binary import JukeboxPanelLinuxBinaryModule
-from music_app_ssh_worker import MusicAppSSHWorker
+from music_app_ssh_worker import MusicAppSSHWorker, SUCCESS_OUTPUT
 from playlist import Playlist
 from shairport_mqtt import ShairportSyncMQTTSource
 
@@ -25,10 +25,11 @@ from serial import Serial
 
 TRACK_INDEX_OFFSET = 100
 
-# Selecting a number in this range plays that track immediately (queued
-# next, then skipped to right away via a "nextitem" remote command) rather
-# than just queuing it up behind whatever's currently playing -- its own
-# offset into the playlist, independent of TRACK_INDEX_OFFSET above.
+# Selecting a number in this range plays that track immediately (direct
+# Music.app control via play_track.js when [sshWorker] is configured,
+# otherwise a queue_next + "nextitem" remote command pair over MQTT/DACP)
+# rather than just queuing it up behind whatever's currently playing --
+# its own offset into the playlist, independent of TRACK_INDEX_OFFSET above.
 IMMEDIATE_PLAY_RANGE = range(300, 501)
 IMMEDIATE_PLAY_INDEX_OFFSET = 300
 
@@ -121,6 +122,23 @@ def main(config_path=None):
         if coordinator_holder:
             coordinator_holder[0].on_button_press(key)
 
+    def runMusicAppCommandAsync(description: str, fn) -> None:
+        """Runs a MusicAppSSHWorker call (playpause/next_track/
+        previous_track/play_track) on a background thread -- the caller is
+        always the coordinator's own single processing thread, which must
+        never block on an SSH round-trip -- and logs a warning if it
+        didn't cleanly succeed. fn takes no arguments and returns a
+        CommandResult; description is just for the log message."""
+        def run():
+            try:
+                result = fn()
+                output = (result.stdout or result.stderr).strip()
+                if not (result.ok and output == SUCCESS_OUTPUT):
+                    logger.warning("%s failed: %s", description, output)
+            except ConnectionError as e:
+                logger.warning("%s failed: %s", description, e)
+        threading.Thread(target=run, daemon=True).start()
+
     def onTrackSelected(entered: str) -> bool:
         if playlist is None:
             coordinator.add_message(
@@ -135,9 +153,20 @@ def main(config_path=None):
         if track is None:
             logger.info(f"No playlist track matches selection {entered}")
             return False
-        source.queue_next(track.persistent_id)
-        if immediate:
-            source.send_remote_command("nextitem")
+        if immediate and ssh_worker is not None:
+            # Direct Music.app control -- see play_track.js's comment for
+            # why this only covers the immediate case; "queue behind the
+            # current track" below still needs shairport-sync's own
+            # DACP queue_next, which has no Music.app scripting equivalent.
+            persistent_id = track.persistent_id
+            runMusicAppCommandAsync(
+                f"play_track {persistent_id!r} via direct Music.app control",
+                lambda: ssh_worker.play_track(persistent_id),
+            )
+        else:
+            source.queue_next(track.persistent_id)
+            if immediate:
+                source.send_remote_command("nextitem")
         return True
 
     def getLocalIpAddress() -> str:
@@ -157,23 +186,42 @@ def main(config_path=None):
             "IP", getLocalIpAddress(), ttl_s=SHOW_IP_ADDRESS_TTL_S, display_s=5,
         )
 
+    # Direct Music.app control for these three, in preference to
+    # shairport-sync's MQTT/DACP remote-control path: DACP has no
+    # acknowledgment of whether a command actually took effect (see
+    # ShairportSyncMQTTSource.send_remote_command()'s docstring), and was
+    # observed silently failing during the Pi Zero port bring-up even with
+    # a live AirPlay session. Falls back to the MQTT/DACP path if
+    # [sshWorker] isn't configured at all.
+    DIRECT_COMMAND_FNS = {
+        "playpause": lambda: ssh_worker.playpause(),
+        "nextitem": lambda: ssh_worker.next_track(),
+        "previtem": lambda: ssh_worker.previous_track(),
+    }
+
     def onCommand(command: str) -> None:
         # Local pseudo-commands (see coordinator.py's COMMANDS) -- handled
-        # here instead of being forwarded to shairport-sync, which
-        # wouldn't recognize them.
+        # here instead of being forwarded to the Mac, which wouldn't
+        # recognize them.
         if command == "advance_display":
             coordinator.advance_display()
             return
         if command == "show_ip_address":
             showIpAddress()
             return
-        source.send_remote_command(command)
+
+        direct_fn = DIRECT_COMMAND_FNS.get(command)
+        if ssh_worker is not None and direct_fn is not None:
+            runMusicAppCommandAsync(f"{command!r} via direct Music.app control", direct_fn)
+        else:
+            source.send_remote_command(command)
+
         if command == "playpause":
             observed_generation = playback_event_generation[0]
 
             def checkPlaypauseEffect():
                 if playback_event_generation[0] == observed_generation:
-                    runAirplayRecovery("playpause had no effect via shairport-sync")
+                    runAirplayRecovery("playpause had no effect")
 
             threading.Timer(mqtt_config.remote_command_timeout_s, checkPlaypauseEffect).start()
 
@@ -221,7 +269,7 @@ def main(config_path=None):
         track = None
         if playlist is not None:
             try:
-                track = playlist.get_by_persistent_id(track_id)
+                track = playlist.get_by_shairport_sync_track_id(track_id)
             except ValueError:
                 track = None
         coordinator.display_track_number(
@@ -276,13 +324,6 @@ def main(config_path=None):
 
         threading.Timer(NOTHING_PLAYING_GRACE_S, checkResumedWithoutMetadata).start()
 
-    # The recovery script's own success sentinel (see the return "OK" line
-    # in src/osx/scripts/recover_airplay_playback.js) -- osascript's exit
-    # status is 0 either way (it only ever throws for a scripting error, not
-    # a "device not found"/"not available" outcome), so this is the only
-    # way to tell success from failure.
-    _RECOVERY_SUCCESS_OUTPUT = "OK"
-
     def runAirplayRecovery(reason: str) -> None:
         # Callers all run this off the coordinator thread already (a
         # background thread the MQTT source spawns per remote command, or
@@ -304,7 +345,11 @@ def main(config_path=None):
                     "%s -- ran AirPlay recovery over SSH (attempt %d/%d): %s",
                     reason, attempt, attempts, output,
                 )
-                if result.ok and output == _RECOVERY_SUCCESS_OUTPUT:
+                # osascript's exit status is 0 either way here (the script
+                # only ever throws for a scripting error, not a "device not
+                # found"/"not available" outcome) -- SUCCESS_OUTPUT is the
+                # only way to tell success from a handled failure.
+                if result.ok and output == SUCCESS_OUTPUT:
                     coordinator.remove_message("Error")
                     return
             except ConnectionError as e:

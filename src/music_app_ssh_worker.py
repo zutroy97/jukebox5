@@ -14,12 +14,25 @@ _OSX_SCRIPTS_DIR = Path(__file__).parent / "osx" / "scripts"
 _RECOVER_AIRPLAY_PLAYBACK_SCRIPT_PATH = _OSX_SCRIPTS_DIR / "recover_airplay_playback.js"
 _GET_NOW_PLAYING_SCRIPT_PATH = _OSX_SCRIPTS_DIR / "get_now_playing.js"
 _GET_PLAYLIST_TRACKS_SCRIPT_PATH = _OSX_SCRIPTS_DIR / "get_playlist_tracks.js"
+_PLAYPAUSE_SCRIPT_PATH = _OSX_SCRIPTS_DIR / "playpause.js"
+_NEXT_TRACK_SCRIPT_PATH = _OSX_SCRIPTS_DIR / "next_track.js"
+_PREVIOUS_TRACK_SCRIPT_PATH = _OSX_SCRIPTS_DIR / "previous_track.js"
+_PLAY_TRACK_SCRIPT_PATH = _OSX_SCRIPTS_DIR / "play_track.js"
 # Include the surrounding quotes from the .js file's dummy string literals
 # (e.g. `"__AIRPLAY_DEVICE_NAME__"`) so the whole literal -- quotes and all
 # -- gets replaced by json.dumps(...)'s own quoting, rather than nesting one
 # inside the other.
 _AIRPLAY_DEVICE_NAME_PLACEHOLDER = '"__AIRPLAY_DEVICE_NAME__"'
 _PLAYLIST_NAME_PLACEHOLDER = '"__PLAYLIST_NAME__"'
+_PERSISTENT_ID_PLACEHOLDER = '"__PERSISTENT_ID__"'
+
+# Sentinel a script returns on success -- see recover_airplay_playback.js's
+# comment on why osascript's exit status alone can't distinguish success
+# from a handled failure (e.g. "track not found") for scripts that catch
+# their own errors and return a description instead of throwing. Exposed
+# (no leading underscore) so callers checking CommandResult.stdout have a
+# single source of truth instead of a second hardcoded "OK" literal.
+SUCCESS_OUTPUT = "OK"
 
 
 def default_airplay_device_name() -> str:
@@ -105,6 +118,10 @@ class MusicAppSSHWorker:
         self._recover_airplay_playback_script_template = _RECOVER_AIRPLAY_PLAYBACK_SCRIPT_PATH.read_text()
         self._get_now_playing_script_template = _GET_NOW_PLAYING_SCRIPT_PATH.read_text()
         self._get_playlist_tracks_script_template = _GET_PLAYLIST_TRACKS_SCRIPT_PATH.read_text()
+        self._playpause_script = _PLAYPAUSE_SCRIPT_PATH.read_text()
+        self._next_track_script = _NEXT_TRACK_SCRIPT_PATH.read_text()
+        self._previous_track_script = _PREVIOUS_TRACK_SCRIPT_PATH.read_text()
+        self._play_track_script_template = _PLAY_TRACK_SCRIPT_PATH.read_text()
         self._on_connection_lost = on_connection_lost
         self._on_connection_established = on_connection_established
 
@@ -209,6 +226,57 @@ class MusicAppSSHWorker:
         (via execute()) if the SSH session is not currently up."""
         script = self._get_playlist_tracks_script_template.replace(
             _PLAYLIST_NAME_PLACEHOLDER, json.dumps(self._playlist_name)
+        )
+        encoded = base64.b64encode(script.encode()).decode()
+        command = f"echo {encoded} | base64 -d | osascript -l JavaScript"
+        return self.execute(command, timeout_s=timeout_s)
+
+    def playpause(self, timeout_s: Optional[float] = 15.0) -> CommandResult:
+        """Run src/osx/scripts/playpause.js on the remote machine (as
+        JavaScript for Automation, via osascript) to toggle Music.app's
+        play/pause state directly -- the primary path for the keypad's `PP`
+        command, replacing shairport-sync's MQTT/DACP remote control (see
+        the script's own comment for why). Raises ConnectionError (via
+        execute()) if the SSH session is not currently up."""
+        encoded = base64.b64encode(self._playpause_script.encode()).decode()
+        command = f"echo {encoded} | base64 -d | osascript -l JavaScript"
+        return self.execute(command, timeout_s=timeout_s)
+
+    def next_track(self, timeout_s: Optional[float] = 15.0) -> CommandResult:
+        """Run src/osx/scripts/next_track.js on the remote machine (as
+        JavaScript for Automation, via osascript) to skip to the next
+        track directly -- the primary path for the keypad's `P666`
+        command. Raises ConnectionError (via execute()) if the SSH session
+        is not currently up."""
+        encoded = base64.b64encode(self._next_track_script.encode()).decode()
+        command = f"echo {encoded} | base64 -d | osascript -l JavaScript"
+        return self.execute(command, timeout_s=timeout_s)
+
+    def previous_track(self, timeout_s: Optional[float] = 15.0) -> CommandResult:
+        """Run src/osx/scripts/previous_track.js on the remote machine (as
+        JavaScript for Automation, via osascript) to skip to the previous
+        track directly -- the primary path for the keypad's `P111`
+        command. Raises ConnectionError (via execute()) if the SSH session
+        is not currently up."""
+        encoded = base64.b64encode(self._previous_track_script.encode()).decode()
+        command = f"echo {encoded} | base64 -d | osascript -l JavaScript"
+        return self.execute(command, timeout_s=timeout_s)
+
+    def play_track(self, persistent_id: str, timeout_s: Optional[float] = 15.0) -> CommandResult:
+        """Run src/osx/scripts/play_track.js on the remote machine (as
+        JavaScript for Automation, via osascript) to immediately play the
+        playlist_name track matching persistent_id -- the primary path for
+        "immediate play" range keypad track selections (see §7 of
+        docs/SPECIFICATION.md). Only covers the immediate case: "queue
+        behind the current track" selections still go through
+        ShairportSyncMQTTSource.queue_next(), since that's a genuine
+        AirPlay-remote queue operation with no Music.app scripting
+        equivalent (see play_track.js's comment). Raises ConnectionError
+        (via execute()) if the SSH session is not currently up."""
+        script = self._play_track_script_template.replace(
+            _PLAYLIST_NAME_PLACEHOLDER, json.dumps(self._playlist_name)
+        ).replace(
+            _PERSISTENT_ID_PLACEHOLDER, json.dumps(persistent_id)
         )
         encoded = base64.b64encode(script.encode()).decode()
         command = f"echo {encoded} | base64 -d | osascript -l JavaScript"
