@@ -1,0 +1,32 @@
+# KiCad backups and autosave
+*-backups/
+_autosave-*
+*.bak
+*.kicad_pcb-bak
+*.kicad_sch-bak
+*.kicad_prl-bak
+
+# KiCad local history (auto snapshots - see README.txt in that folder)
+_local_history/
+**/local_history/
+
+# Lock files
+*.lck
+
+# Footprint library cache (regenerated)
+fp-info-cache
+
+# Plot / fabrication output (regenerate on demand)
+gerbers/
+plots/
+*.zip
+
+# Misc
+*~
+*.tmp
+.DS_Store
+Thumbs.db
+.history/
+_restore_backup_*/
+*.zip
+*.tmp
