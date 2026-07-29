@@ -38,6 +38,18 @@ class MQTTConfig:
     # (see ShairportSyncMQTTSource.send_remote_command) before treating that
     # path as unresponsive and falling back to sshWorker's AirPlay recovery.
     remote_command_timeout_s: float = 5.0
+    # How playpause/nextitem/previtem/immediate-play track selections are
+    # sent -- see RemoteControlSelector for what each value means. Only
+    # takes effect when [sshWorker] is configured; otherwise everything
+    # behaves as "mqtt" regardless of this setting, since there is no SSH
+    # connection to run JXA over.
+    remote_control_mode: str = "jxa"
+    # Only relevant when remote_control_mode is "fallback": how many MQTT
+    # remote-control commands must go unacknowledged within
+    # remote_control_fallback_window_s before permanently switching to
+    # JXA for the rest of this process's run.
+    remote_control_fallback_threshold: int = 3
+    remote_control_fallback_window_s: float = 300.0
 
 
 @dataclass(frozen=True)
@@ -162,6 +174,9 @@ class Config:
             broker_port=section.getint("broker_port", fallback=1883),
             base_topic=section.get("base_topic", fallback="shairport-sync"),
             remote_command_timeout_s=section.getfloat("remote_command_timeout_s", fallback=5.0),
+            remote_control_mode=section.get("remote_control_mode", fallback="jxa"),
+            remote_control_fallback_threshold=section.getint("remote_control_fallback_threshold", fallback=3),
+            remote_control_fallback_window_s=section.getfloat("remote_control_fallback_window_s", fallback=300.0),
         )
 
     def track_selection_feedback(self) -> TrackSelectionFeedbackConfig:

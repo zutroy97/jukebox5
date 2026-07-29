@@ -728,18 +728,26 @@ never publishes `track_id` at all or it arrives out of the expected
 order).
 
 **Remote control**: `playpause`, `nextitem`, `previtem`, and "immediate
-play" track selections (§7) are sent as *direct Music.app control* over
-the `[sshWorker]` SSH connection described in §10 (JavaScript for
-Automation — `playpause.js`/`next_track.js`/`previous_track.js`/
-`play_track.js`, run via `MusicAppSSHWorker`) rather than through
-shairport-sync's MQTT remote-control feature.
-This is a deliberate choice, not just a preference: shairport-sync's own
-`/remote` topic (plain command strings, or an explicit
-`queue_next <persistent_id>`) has no acknowledgment of whether a command
-actually reached or took effect on the AirPlay source, and was observed
-failing silently even with a live AirPlay session during real-world use.
-Direct JXA control gives a real exit status instead. If `[sshWorker]`
-isn't configured, these fall back to the `/remote` topic.
+play" track selections (§7) can be sent either as *direct Music.app
+control* over the `[sshWorker]` SSH connection described in §10
+(JavaScript for Automation — `playpause.js`/`next_track.js`/
+`previous_track.js`/`play_track.js`, run via `MusicAppSSHWorker`), or
+through shairport-sync's own MQTT `/remote` topic (plain command
+strings, or an explicit `queue_next <persistent_id>`) — configurable via
+`remote_control_mode` (§11): `"jxa"`, `"mqtt"`, or `"fallback"`.
+
+Direct JXA control exists as an alternative because shairport-sync's
+MQTT remote control has no acknowledgment of whether a command actually
+reached or took effect on the AirPlay source, and was observed failing
+silently even with a live AirPlay session during real-world use — JXA
+gives a real exit status instead. `"fallback"` mode starts on MQTT and
+permanently switches to JXA once a configurable number of MQTT commands
+have gone unacknowledged within a configurable trailing window (a
+one-way switch for the rest of the process's run, not a retry loop —
+re-testing a path already proven unreliable just risks repeating the
+same silent failures). Regardless of mode, `"jxa"`/`"fallback"` both
+behave as plain `"mqtt"` if `[sshWorker]` isn't configured at all, since
+there's no SSH connection to run JXA over.
 
 The one exception: "queue behind the current track without interrupting
 it" (the non-immediate track-selection range in §7) still goes through
@@ -814,6 +822,8 @@ omitted:
 | Track-selection feedback | 3 blinks / 250ms phase / "Err" / 2s | §7's post-entry blink/error feedback tuning |
 | Paused-display flash interval | 750ms | §8.2 |
 | MQTT broker connection | localhost:1883, base topic `shairport-sync` | §9 |
+| Remote-control mode | `jxa` | `jxa`/`mqtt`/`fallback` — §9 |
+| Fallback trip threshold/window | 3 failures / 300s | Only relevant in `fallback` mode — §9 |
 | Playlist file path | bundled default | §10 |
 
 ---

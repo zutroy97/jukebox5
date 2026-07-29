@@ -18,6 +18,7 @@ from panel.jukebox_panel_linux_ascii import JukeboxPanelLinuxAsciiModule
 from panel.jukebox_panel_linux_binary import JukeboxPanelLinuxBinaryModule
 from music_app_ssh_worker import MusicAppSSHWorker, SUCCESS_OUTPUT
 from playlist import Playlist, reverse_byte_order
+from remote_control_selector import RemoteControlSelector
 from shairport_mqtt import ShairportSyncMQTTSource
 
 from serial import Serial
@@ -153,11 +154,13 @@ def main(config_path=None):
         if track is None:
             logger.info(f"No playlist track matches selection {entered}")
             return False
-        if immediate and ssh_worker is not None:
+        if immediate and ssh_worker is not None and remote_control_selector.should_use_jxa():
             # Direct Music.app control -- see play_track.js's comment for
             # why this only covers the immediate case; "queue behind the
             # current track" below still needs shairport-sync's own
-            # DACP queue_next, which has no Music.app scripting equivalent.
+            # DACP queue_next, which has no Music.app scripting equivalent
+            # (and isn't affected by remote_control_selector's mode at all,
+            # for the same reason).
             persistent_id = track.persistent_id
             runMusicAppCommandAsync(
                 f"play_track {persistent_id!r} via direct Music.app control",
@@ -193,13 +196,16 @@ def main(config_path=None):
             "IP", getLocalIpAddress(), ttl_s=SHOW_IP_ADDRESS_TTL_S, display_s=5,
         )
 
-    # Direct Music.app control for these three, in preference to
+    # Direct Music.app control for these three, as an alternative to
     # shairport-sync's MQTT/DACP remote-control path: DACP has no
     # acknowledgment of whether a command actually took effect (see
     # ShairportSyncMQTTSource.send_remote_command()'s docstring), and was
     # observed silently failing during the Pi Zero port bring-up even with
-    # a live AirPlay session. Falls back to the MQTT/DACP path if
-    # [sshWorker] isn't configured at all.
+    # a live AirPlay session. Which path is actually used for a given
+    # command is decided by remote_control_selector -- see
+    # RemoteControlSelector and mqtt_config.remote_control_mode. Falls
+    # back to the MQTT/DACP path regardless of mode if [sshWorker] isn't
+    # configured at all.
     DIRECT_COMMAND_FNS = {
         "playpause": lambda: ssh_worker.playpause(),
         "nextitem": lambda: ssh_worker.next_track(),
@@ -218,7 +224,8 @@ def main(config_path=None):
             return
 
         direct_fn = DIRECT_COMMAND_FNS.get(command)
-        if ssh_worker is not None and direct_fn is not None:
+        used_jxa = ssh_worker is not None and direct_fn is not None and remote_control_selector.should_use_jxa()
+        if used_jxa:
             runMusicAppCommandAsync(f"{command!r} via direct Music.app control", direct_fn)
         else:
             source.send_remote_command(command)
@@ -228,6 +235,16 @@ def main(config_path=None):
 
             def checkPlaypauseEffect():
                 if playback_event_generation[0] == observed_generation:
+                    if not used_jxa:
+                        # Counts toward remote_control_selector's fallback
+                        # trip (a no-op outside "fallback" mode). This is
+                        # the real-world MQTT/DACP failure mode, confirmed
+                        # directly: a broker PUBACK (what
+                        # onRemoteCommandUnresponsive tracks) only confirms
+                        # the message was published, not that DACP actually
+                        # did anything on the Mac -- a real playpause
+                        # published successfully and still had no effect.
+                        remote_control_selector.record_mqtt_failure()
                     runAirplayRecovery("playpause had no effect")
 
             threading.Timer(mqtt_config.remote_command_timeout_s, checkPlaypauseEffect).start()
@@ -286,6 +303,11 @@ def main(config_path=None):
 
     # exercise(coordinator)
     mqtt_config = config.mqtt()
+    remote_control_selector = RemoteControlSelector(
+        mode=mqtt_config.remote_control_mode,
+        failure_threshold=mqtt_config.remote_control_fallback_threshold,
+        window_s=mqtt_config.remote_control_fallback_window_s,
+    )
     def onConnectionLost():
         coordinator.add_message("Problem", "MQTT Lost. Attempting Reconnect.", ttl_s=0, display_s=5)
 
@@ -372,6 +394,11 @@ def main(config_path=None):
         coordinator.add_message("Error", "Mac connection failed", ttl_s=0, display_s=5)
 
     def onRemoteCommandUnresponsive():
+        # Counts toward remote_control_selector's fallback trip (a no-op
+        # outside "fallback" mode) independently of runAirplayRecovery
+        # below -- one tracks whether MQTT itself is reliable enough to
+        # keep using, the other tries to fix the AirPlay session itself.
+        remote_control_selector.record_mqtt_failure()
         runAirplayRecovery("MQTT remote command unresponsive")
 
     # Set as soon as there's any sign of an already-active shairport-sync
