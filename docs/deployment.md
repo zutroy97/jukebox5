@@ -76,3 +76,38 @@ service already sets `PYTHONDONTWRITEBYTECODE=1` to avoid attempting
 anyway) land in a RAM-backed delta and are discarded on reboot rather than
 failing outright — so switching it on doesn't require re-verifying
 anything about the app; nothing changes for it either way.
+
+## SSH key setup: passwordless access to the Mac ([sshWorker])
+
+`[sshWorker]` (see `src/config.ini`) needs to reach the Mac account running
+the "Music" app over SSH with no password prompt -- password auth isn't
+supported, only `key_path`. Steps to set this up on a new jukebox host:
+
+```sh
+# 1. On the jukebox host: generate a key pair if one doesn't already exist
+#    for this purpose. Match the filename to whatever you'll put in
+#    [sshWorker]'s key_path -- on jukebox0 this is ed25519 but kept under
+#    the traditional id_rsa filename, since that's what key_path pointed
+#    at when the key was generated; either naming works, they just have
+#    to agree.
+ssh-keygen -t ed25519 -f ~/.ssh/id_rsa -N ""
+
+# 2. Copy the public key to the Mac's authorized_keys (prompts for the
+#    Mac account's password once, this one time only)
+ssh-copy-id -i ~/.ssh/id_rsa.pub simonbs@mbp2017
+
+# 3. Verify it actually connects with no prompt at all
+ssh -o BatchMode=yes simonbs@mbp2017 echo ok
+```
+
+Prerequisites on the Mac side: Remote Login must be on (System Settings →
+General → Sharing → Remote Login), and the account has to be permitted
+there. `~/.ssh` on the Mac should end up `700` and `authorized_keys`
+`600` -- `ssh-copy-id` sets these correctly on its own; if setting it up
+by hand instead, set them explicitly, since `sshd` silently refuses keys
+under overly-permissive directory/file modes.
+
+With `strict_host_key_checking=false` (the `[sshWorker]` default), the
+Mac's host key is trusted and added to the jukebox host's
+`~/.ssh/known_hosts` automatically on first connect -- no manual
+`ssh-keyscan` step needed unless you've set that option to `true`.
