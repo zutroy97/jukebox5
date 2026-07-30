@@ -14,11 +14,15 @@ B+C, 'H' = 0xF6, '0' = 0xC3F which adds K+L as the zero-slash, 'X' = 0x2D00
 Usage: test_14seg.py [--addr 0x70,0x71,0x72,0x73,0x74] [--delay 0.6] [--brightness 0.5] [--mode all]
 """
 import argparse
+import sys
 import time
+from pathlib import Path
 
-from busio import I2C
-import board
-from adafruit_ht16k33 import segments
+# So `drivers.*` is importable regardless of CWD/how this script is invoked --
+# mirrors src/ being on sys.path when running `python3 main.py` from there.
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from drivers.ht16k33_native import Seg14x4Native
 
 # bit -> (short label, human description), per the 14-segment + decimal
 # point layout.
@@ -47,23 +51,19 @@ def parse_addrs(raw: str):
     return tuple(int(a, 0) for a in raw.split(","))
 
 
-def set_all_chars(display: segments.Seg14x4, value: int):
+def set_all_chars(display: Seg14x4Native, value: int):
     """Write the same raw 15-bit segment pattern to every character position."""
-    lo = value & 0xFF
-    hi = (value >> 8) & 0xFF
     for i in range(display._chars):
-        display._set_buffer(display._adjusted_index(i * 2), lo)
-        display._set_buffer(display._adjusted_index(i * 2 + 1), hi)
-    display.show()
+        display.set_digit_raw(i, value)
 
 
-def run_lamp_test(display: segments.Seg14x4, hold_s: float):
+def run_lamp_test(display: Seg14x4Native, hold_s: float):
     print("lamp test: all segments on", flush=True)
     set_all_chars(display, ALL_SEGMENTS_ON)
     time.sleep(hold_s)
 
 
-def run_sweep(display: segments.Seg14x4, hold_s: float):
+def run_sweep(display: Seg14x4Native, hold_s: float):
     for bit, label, desc in SEGMENTS:
         print(f"segment {bit:2d}  {label:<3s}  {desc}", flush=True)
         set_all_chars(display, 1 << bit)
@@ -76,6 +76,10 @@ def main():
         "--addr", default="0x70,0x71,0x72,0x73,0x74",
         help="comma-separated I2C addresses of the HT16K33 chips to test "
              "(default: 0x70,0x71,0x72,0x73,0x74 -- both the label and value displays)",
+    )
+    parser.add_argument(
+        "--bus", type=int, default=1,
+        help="I2C bus number (default: 1)",
     )
     parser.add_argument(
         "--delay", type=float, default=0.6,
@@ -93,8 +97,7 @@ def main():
     args = parser.parse_args()
 
     addrs = parse_addrs(args.addr)
-    i2c = I2C(board.SCL, board.SDA)
-    display = segments.Seg14x4(i2c, address=addrs)
+    display = Seg14x4Native(addrs, bus_number=args.bus)
     display.brightness = args.brightness
 
     try:
