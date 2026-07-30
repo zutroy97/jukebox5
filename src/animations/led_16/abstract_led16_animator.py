@@ -1,14 +1,15 @@
 from enum import Enum
 from abc import abstractmethod, ABC
 import logging
-from adafruit_ht16k33 import segments
 
 from ..abstract_animator import AbstractAnimator
+from drivers.ht16k33_native import FONT
 
 # The HT16K33 14-segment decimal point is bit 14 of a character's 16-bit
-# segment word. The adafruit library's _put() method handles '.' by ORing
-# this bit into the PREVIOUS character rather than advancing the cursor —
-# we replicate that here so get_char_pattern callers can use the same logic.
+# segment word. Seg14x4Native._put() (and the real adafruit_ht16k33 library
+# it replaced) handles '.' by ORing this bit into the PREVIOUS character
+# rather than advancing the cursor — we replicate that here so
+# get_char_pattern callers can use the same logic.
 DECIMAL_POINT_BIT = 0x4000
 
 
@@ -24,7 +25,7 @@ class AbstractLED16Animator(AbstractAnimator):
           '.'  — returns DECIMAL_POINT_BIT (0x4000). The CALLER is responsible
                  for ORing this into the bitmask of the preceding character rather
                  than placing it in its own display position, matching the behaviour
-                 of adafruit_ht16k33 Seg14x4._put().
+                 of Seg14x4Native._put().
           ','  — treated identically to '.' since a comma occupies the same lower
                  dot segment on a 14-segment display and there is no distinct glyph.
 
@@ -34,11 +35,7 @@ class AbstractLED16Animator(AbstractAnimator):
         if char == '.' or char == ',':
             return DECIMAL_POINT_BIT
 
-        if not 32 <= ord(char) <= 127:
-            return 0
-
-        character = ord(char) * 2 - 64
-        return (segments.CHARS[character] << 8) | segments.CHARS[1 + character]
+        return FONT.get(char, 0)
 
     @staticmethod
     def string_to_char_mask(s: str) -> list[int]:
@@ -46,7 +43,7 @@ class AbstractLED16Animator(AbstractAnimator):
 
         Decimal points and commas are folded into the preceding character's bitmask
         (ORed in) and do not consume an extra display position, matching the
-        adafruit_ht16k33 Seg14x4 rendering behaviour.
+        Seg14x4Native rendering behaviour.
 
         Characters outside the printable ASCII range (32-127) are represented as 0.
         '''

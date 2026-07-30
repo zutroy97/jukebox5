@@ -4,7 +4,7 @@ from animations.led_16.led16_static import LED16Static
 from animations.text.static import Static
 
 from ..single_line_animated_simple_base import SingleLineAnimatedObserverBase
-from adafruit_ht16k33 import segments
+from drivers.ht16k33_native import Seg14x4Native
 from observer_states import ObserverStates
 
 class SingleLineLed16AnimatedObserver(SingleLineAnimatedObserverBase):
@@ -13,7 +13,7 @@ class SingleLineLed16AnimatedObserver(SingleLineAnimatedObserverBase):
         super().__init__(**kwargs)
         if "driver" not in kwargs:
             raise TypeError("Missing required keyword argument: 'driver'")
-        self._driver : segments.Seg14x4 = kwargs['driver']
+        self._driver : Seg14x4Native = kwargs['driver']
         self._driver.auto_write = False # We will control when to update the display
         self.DisplayWidth = self._driver._chars
         self._line_animation = Static(max_text_width=self.DisplayWidth)

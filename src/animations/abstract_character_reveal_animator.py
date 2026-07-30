@@ -57,7 +57,7 @@ class SegmentByCharacterRevealAnimator(AbstractCharacterRevealAnimator):
     starts, matching a left-to-right "materializing" typewriter look.
 
     Requires the observer's DisplayDriver to expose the underlying
-    adafruit_ht16k33 Seg14x4 object via a `.Seg14x4` property (see
+    Seg14x4Native object via a `.Seg14x4` property (see
     drivers/led16_display.py) for raw per-segment writes -- there's no way
     to light individual segments through the character-based write_at_position
     API alone.

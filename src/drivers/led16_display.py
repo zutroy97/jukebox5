@@ -1,18 +1,15 @@
 import logging
 from . import abstract_line_display
 
-from busio import I2C
-import board
-from adafruit_ht16k33 import segments
+from .ht16k33_native import Seg14x4Native
 
 
 class led16_display(abstract_line_display.AbstractSingleLineDisplay):
 
     def __init__(self, **kwargs) -> None:
         self._logger = logging.getLogger(__class__.__name__)
-        i2c = kwargs.get('i2c', I2C(board.SCL, board.SDA))
         addr = kwargs.get('addr', (0x72, 0x73, 0x74))
-        self._display = segments.Seg14x4(i2c, address=addr)
+        self._display = Seg14x4Native(addr, bus_number=kwargs.get('bus_number', 1), bus=kwargs.get('bus'))
         self._display.brightness = 0.20
         self._width = len(self._display.i2c_device) * 4
         self._position = 0
@@ -23,7 +20,7 @@ class led16_display(abstract_line_display.AbstractSingleLineDisplay):
         self._display.brightness = brightness
 
     @property
-    def Seg14x4(self) -> segments.Seg14x4:
+    def Seg14x4(self) -> Seg14x4Native:
         return self._display
 
     @property
@@ -63,8 +60,8 @@ class led16_display(abstract_line_display.AbstractSingleLineDisplay):
         self.set_position(position)
         self.write(text)
         if dp and position < self._width:
-            # adafruit's own '.' handling ORs the DP bit into whatever's
-            # already at the given index rather than overwriting it.
+            # _put()'s '.' handling ORs the DP bit into whatever's already
+            # at the given index rather than overwriting it.
             self._display._put('.', position)
             self._pending_show = True
 
