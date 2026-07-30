@@ -107,9 +107,7 @@ def apply_animation_config(observer, config: Config):
             reveal_animation.delay_between_segments_s = animation_config.delay_between_segments_s
 
 
-def main(config_path=None):
-    config = Config(config_path)
-
+def main(config: Config):
     # build_panel() below starts a background thread that can call this
     # immediately -- e.g. the kernel driver's kfifo may already hold a
     # queued press from before this process even started -- which can be
@@ -573,6 +571,7 @@ if __name__ == '__main__':
         help="Path to the config INI file (default: src/config.ini)",
     )
     args = arg_parser.parse_args()
+    config = Config(args.config_path)
 
     formatter = logging.Formatter(
         fmt='%(asctime)s.%(msecs)03d %(name)s %(levelname)s %(message)s',
@@ -582,6 +581,6 @@ if __name__ == '__main__':
     handler = logging.StreamHandler()
     handler.setFormatter(formatter)
     logger.addHandler(handler)
-    logger.setLevel(logging.DEBUG)
+    logger.setLevel(config.logging().level)
 
-    main(args.config_path)
+    main(config)

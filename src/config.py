@@ -10,6 +10,8 @@ DISPLAY_FIELDS = ("artist", "title", "album")
 
 CHARACTER_REVEAL_ANIMATIONS = ("immediate", "segment")
 
+LOG_LEVELS = ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL")
+
 
 @dataclass(frozen=True)
 class AnimationConfig:
@@ -69,6 +71,13 @@ class PlaybackPauseFlashConfig:
 
 
 @dataclass(frozen=True)
+class LoggingConfig:
+    """Root logger verbosity. One of LOG_LEVELS, case-insensitive in the
+    config file; stored here already normalised to upper case."""
+    level: str = "INFO"
+
+
+@dataclass(frozen=True)
 class SSHWorkerConfig:
     """Connection settings for MusicAppSSHWorker -- the SSH link to the
     machine running the macOS Music app, used for commands that
@@ -120,6 +129,9 @@ class Config:
         (src/osx/scripts/recover_airplay_playback.js) should target --
         independent settings, not assumed to match each other. Section is
         optional; omitting it disables the feature entirely.
+      - `logging`: has a single `level` key (one of LOG_LEVELS, case-
+        insensitive) setting the root logger's verbosity. Section is
+        optional; omitting it (or the key) defaults to INFO.
     """
 
     def __init__(self, path: Optional[str] = None) -> None:
@@ -223,6 +235,16 @@ class Config:
             recovery_attempts=section.getint("recovery_attempts", fallback=3),
             recovery_retry_delay_s=section.getfloat("recovery_retry_delay_s", fallback=5.0),
         )
+
+    def logging(self) -> LoggingConfig:
+        if "logging" not in self._parser:
+            return LoggingConfig()
+
+        level = self._parser["logging"].get("level", fallback="INFO").strip().upper()
+        if level not in LOG_LEVELS:
+            raise ValueError(f"[logging] level {level!r} is invalid; valid values are {LOG_LEVELS}")
+
+        return LoggingConfig(level=level)
 
     def display_fields(self) -> list:
         if "display" not in self._parser:
