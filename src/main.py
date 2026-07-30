@@ -15,7 +15,7 @@ from animations.abstract_character_reveal_animator import (
     SegmentByCharacterRevealAnimator,
 )
 from config import Config, PanelConfig
-from config_override import check_and_apply_override
+from config_override import active_config_path, check_and_apply_override
 from observers import UpdateEventType, Coordinator, SingleTextLineAnimatedObserver, KeyValueTextObserver
 from panel.panel_input_base import JukeboxPanelArduinoSerial
 from panel.jukebox_panel_linux_ascii import JukeboxPanelLinuxAsciiModule
@@ -617,7 +617,9 @@ if __name__ == '__main__':
     )
     args = arg_parser.parse_args()
     config_path = args.config_path or os.path.join(os.path.dirname(__file__), "config.ini")
-    config = Config(config_path)
+    # A previously-applied Mac override cached from an earlier restart (see
+    # config_override.py) takes precedence over config_path itself.
+    config = Config(active_config_path(config_path))
 
     formatter = logging.Formatter(
         fmt='%(asctime)s.%(msecs)03d %(name)s %(levelname)s %(message)s',
@@ -631,14 +633,14 @@ if __name__ == '__main__':
 
     # Checks ~/.jukebox/config.ini on the Mac (see config_override.py) for
     # a newer config to run with -- a person can edit that instead of
-    # config.ini on jukebox0 itself, whose root filesystem may be
-    # read-only. A valid, different override is adopted and this process
-    # restarted via execv so the rest of startup (MQTT client, panel
-    # driver, displays, ...) is built fresh from it rather than trying to
-    # hot-swap already-constructed objects. An invalid override is never
-    # adopted -- just flashed briefly on the two displays -- and does not
-    # stop the jukebox starting normally on the config that was already
-    # there.
+    # config.ini on jukebox0 itself, which is read-only to this process
+    # under systemd (ProtectSystem=strict). A valid, different override is
+    # cached to /run/jukebox and this process restarted via execv so the
+    # rest of startup (MQTT client, panel driver, displays, ...) is built
+    # fresh from it rather than trying to hot-swap already-constructed
+    # objects. An invalid override is never adopted -- just flashed
+    # briefly on the two displays -- and does not stop the jukebox
+    # starting normally on the config that was already active.
     override_result = check_and_apply_override(config, config_path)
     if override_result.applied:
         logger.info("Applied a new config override from the Mac; restarting")

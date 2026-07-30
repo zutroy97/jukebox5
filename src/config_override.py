@@ -9,10 +9,41 @@ import paramiko
 from config import Config, SSHWorkerConfig
 
 # Where to look for an override config.ini on the machine running the Music
-# app -- a plain text file a person can edit there instead of on jukebox0
-# (whose root filesystem may be mounted read-only -- see docs/deployment.md).
+# app -- a plain text file a person can edit there instead of on jukebox0,
+# which is read-only to the jukebox.service process under systemd
+# (ProtectSystem=strict -- see _RUNTIME_DIR below) independent of whether
+# jukebox0's own root filesystem happens to be read-only too.
 _REMOTE_OVERRIDE_PATH = "~/.jukebox/config.ini"
 _FETCH_TIMEOUT_S = 10.0
+
+# systemd's jukebox.service unit runs with ProtectSystem=strict +
+# ProtectHome=read-only, making the *entire* filesystem read-only to this
+# process regardless of whether the underlying disk/overlay itself is
+# writable -- confirmed the hard way (EROFS writing straight over
+# config.ini, not just when jukebox0's own root-filesystem overlay
+# happens to be read-only). RuntimeDirectory=jukebox in that same unit
+# exists specifically to give the process one small writable tmpfs
+# directory for exactly this kind of need. Falls back to a path next to
+# config_path for manual/dev runs outside systemd, where nothing is
+# sandboxed and /run/jukebox won't exist.
+_RUNTIME_DIR = "/run/jukebox"
+_OVERRIDE_CACHE_FILENAME = "config_override.ini"
+
+
+def override_cache_path(config_path: str) -> str:
+    if os.path.isdir(_RUNTIME_DIR):
+        return os.path.join(_RUNTIME_DIR, _OVERRIDE_CACHE_FILENAME)
+    return os.path.join(os.path.dirname(config_path), _OVERRIDE_CACHE_FILENAME)
+
+
+def active_config_path(config_path: str) -> str:
+    """The config.ini this process should actually load from: a
+    previously-applied override cached in override_cache_path() if one
+    exists (e.g. surviving an execv-based restart within the same systemd
+    service instance -- see check_and_apply_override()), otherwise
+    config_path itself."""
+    cache_path = override_cache_path(config_path)
+    return cache_path if os.path.exists(cache_path) else config_path
 
 _logger = logging.getLogger("ConfigOverride")
 
@@ -103,10 +134,14 @@ def _validate_override_text(text: str) -> Optional[str]:
 
 
 def check_and_apply_override(config: Config, config_path: str) -> OverrideResult:
-    """Checks _REMOTE_OVERRIDE_PATH on the Mac for a config.ini different
-    from the one at config_path; if it's valid, writes it to config_path.
-    Never touches config_path if the override is missing, unreachable,
-    identical to what's already there, or invalid."""
+    """Checks _REMOTE_OVERRIDE_PATH on the Mac for a config different from
+    the one this process actually started with (active_config_path(),
+    which may itself already be a cached override from an earlier
+    restart). If it's valid, caches it at override_cache_path() -- never
+    config_path itself, which is read-only under the systemd service (see
+    _RUNTIME_DIR above). Leaves everything untouched if the override is
+    missing, unreachable, identical to what's already active, or
+    invalid."""
     try:
         ssh_config = config.ssh_worker()
     except ValueError:
@@ -118,7 +153,7 @@ def check_and_apply_override(config: Config, config_path: str) -> OverrideResult
     if remote_text is None:
         return OverrideResult(applied=False)
 
-    with open(config_path, "r") as f:
+    with open(active_config_path(config_path), "r") as f:
         local_text = f.read()
     if remote_text == local_text:
         return OverrideResult(applied=False)  # already applied -- avoid restarting every boot
@@ -127,6 +162,8 @@ def check_and_apply_override(config: Config, config_path: str) -> OverrideResult
     if error is not None:
         return OverrideResult(applied=False, error=error)
 
-    with open(config_path, "w") as f:
+    cache_path = override_cache_path(config_path)
+    os.makedirs(os.path.dirname(cache_path), exist_ok=True)
+    with open(cache_path, "w") as f:
         f.write(remote_text)
     return OverrideResult(applied=True)
