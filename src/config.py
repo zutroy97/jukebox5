@@ -71,6 +71,17 @@ class PlaybackPauseFlashConfig:
 
 
 @dataclass(frozen=True)
+class ShutdownDisplayConfig:
+    """Text shown on the two alphanumeric displays when the app shuts down
+    (SIGTERM, e.g. `systemctl stop`, or Ctrl+C) -- alpha_text on the
+    8-character label display (led0), value_text on the 12-character value
+    display (led1). The physical control panel (3/4-digit displays + LEDs)
+    goes fully unlit at the same time, independent of these two."""
+    alpha_text: str = "Jukebox"
+    value_text: str = "Terminated"
+
+
+@dataclass(frozen=True)
 class LoggingConfig:
     """Root logger verbosity. One of LOG_LEVELS, case-insensitive in the
     config file; stored here already normalised to upper case."""
@@ -132,6 +143,9 @@ class Config:
       - `logging`: has a single `level` key (one of LOG_LEVELS, case-
         insensitive) setting the root logger's verbosity. Section is
         optional; omitting it (or the key) defaults to INFO.
+      - `shutdown`: `alpha_text`/`value_text` shown on the two alphanumeric
+        displays when the app shuts down. Section is optional; omitting it
+        (or either key) defaults to "Jukebox"/"Terminated".
     """
 
     def __init__(self, path: Optional[str] = None) -> None:
@@ -234,6 +248,16 @@ class Config:
             playlist_name=section.get("playlist_name", fallback="Jukebox"),
             recovery_attempts=section.getint("recovery_attempts", fallback=3),
             recovery_retry_delay_s=section.getfloat("recovery_retry_delay_s", fallback=5.0),
+        )
+
+    def shutdown_display(self) -> ShutdownDisplayConfig:
+        if "shutdown" not in self._parser:
+            return ShutdownDisplayConfig()
+
+        section = self._parser["shutdown"]
+        return ShutdownDisplayConfig(
+            alpha_text=section.get("alpha_text", fallback="Jukebox"),
+            value_text=section.get("value_text", fallback="Terminated"),
         )
 
     def logging(self) -> LoggingConfig:

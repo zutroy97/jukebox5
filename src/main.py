@@ -1,6 +1,8 @@
 import argparse
 import json
+import signal
 import socket
+import sys
 import time
 import threading
 import logging
@@ -553,13 +555,39 @@ def main(config: Config):
         )
         ssh_worker.start()
 
-    try:
-        threading.Event().wait()
-    except KeyboardInterrupt:
+    def performShutdown() -> None:
+        """Stops all background workers, then leaves the two alphanumeric
+        displays showing the configured shutdown text and the physical
+        panel fully unlit -- so anyone looking at the jukebox after
+        `systemctl stop`/SIGTERM (or Ctrl+C during development) sees a
+        clean "off" state rather than whatever was on screen at the
+        moment it died."""
         source.stop()
         if ssh_worker is not None:
             ssh_worker.stop()
         coordinator.shutdown()
+        panel.Off()
+        shutdown_display = config.shutdown_display()
+        led0.write(shutdown_display.alpha_text)
+        led0.flush()
+        led1.write(shutdown_display.value_text)
+        led1.flush()
+
+    def onSigterm(signum, frame) -> None:
+        # `systemctl stop` sends SIGTERM, not SIGINT -- Python's default
+        # SIGTERM handling is to terminate immediately with no cleanup, so
+        # without this handler the shutdown display/panel state below
+        # would never run under systemd (only Ctrl+C's SIGINT reaches the
+        # KeyboardInterrupt path).
+        performShutdown()
+        sys.exit(0)
+
+    signal.signal(signal.SIGTERM, onSigterm)
+
+    try:
+        threading.Event().wait()
+    except KeyboardInterrupt:
+        performShutdown()
 
 
 if __name__ == '__main__':
