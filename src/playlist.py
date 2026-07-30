@@ -77,10 +77,22 @@ class Playlist:
     def get_by_shairport_sync_track_id(self, track_id: str) -> Optional[Track]:
         """Looks up a track by the ID string shairport-sync publishes as
         its /track_id MQTT metadata (see §9 of docs/SPECIFICATION.md).
-        Not a plain get_by_persistent_id() call -- shairport-sync's ID is
-        in the opposite byte order from Music.app's own JXA
-        persistentID(), which is what tracks are keyed by here (see
-        reverse_byte_order())."""
+
+        Not a plain get_by_persistent_id() call: on one shairport-sync
+        build (5.0.4), this ID was confirmed in the opposite byte order
+        from Music.app's own JXA persistentID(), which is what tracks are
+        keyed by here (see reverse_byte_order()). After rebuilding
+        shairport-sync from its development branch (for queue_next
+        support), the exact same track's reported ID matched JXA's
+        persistentID() directly, no reversal needed -- the rebuild
+        apparently also changed this formatting, incidentally. Rather than
+        hardcode either behavior (and break again next time
+        shairport-sync's build changes), try the raw ID first, then the
+        byte-reversed form, and use whichever actually matches a known
+        track."""
+        track = self.get_by_persistent_id(track_id)
+        if track is not None:
+            return track
         return self.get_by_persistent_id(reverse_byte_order(track_id))
 
     def __len__(self) -> int:

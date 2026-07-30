@@ -17,7 +17,7 @@ from panel.panel_input_base import JukeboxPanelArduinoSerial
 from panel.jukebox_panel_linux_ascii import JukeboxPanelLinuxAsciiModule
 from panel.jukebox_panel_linux_binary import JukeboxPanelLinuxBinaryModule
 from music_app_ssh_worker import MusicAppSSHWorker, SUCCESS_OUTPUT
-from playlist import Playlist, reverse_byte_order
+from playlist import Playlist
 from remote_control_selector import RemoteControlSelector
 from shairport_mqtt import ShairportSyncMQTTSource
 
@@ -169,12 +169,20 @@ def main(config_path=None):
         else:
             # queue_next's <track_id> argument is documented (shairport-sync's
             # development-branch mqtt.c) as "the hex track_id string as
-            # published by shairport-sync itself" -- i.e. shairport-sync's
-            # own DAAP byte order, not JXA's persistentID() byte order that
-            # track.persistent_id is actually in (see
-            # playlist.reverse_byte_order()'s docstring). Convert before
-            # sending, or this silently references the wrong track.
-            source.queue_next(reverse_byte_order(track.persistent_id))
+            # published by shairport-sync itself". Whether that needs
+            # byte-reversing from track.persistent_id (JXA's format) is NOT
+            # fixed -- confirmed empirically to depend on the shairport-sync
+            # build (see playlist.get_by_shairport_sync_track_id()'s
+            # docstring): the build originally installed needed reversal,
+            # the development-branch rebuild done for this same queue_next
+            # command did not, on the exact same tracks. Sending the raw,
+            # unreversed ID to match the currently-running build; if
+            # queue_next starts silently referencing the wrong track after
+            # a future shairport-sync rebuild, re-diagnose by comparing
+            # Music.currentTrack().persistentID() (get_now_playing.js)
+            # against the /track_id MQTT metadata for the same track, the
+            # same way this was first found.
+            source.queue_next(track.persistent_id)
             if immediate:
                 source.send_remote_command("nextitem")
         return True
