@@ -1,7 +1,12 @@
 [Unit]
 Description=Jukebox5 application
-After=network-online.target mosquitto.service
+After=network-online.target mosquitto.service jukebox-config-fetch.service
 Wants=network-online.target
+# Not Requires= -- jukebox-config-fetch.service always exits 0 (Mac
+# unreachable/no override present are not failures), but Wants= still
+# means "start it first if you're going to start it at all" without
+# making this unit's own startup depend on that one succeeding.
+Wants=jukebox-config-fetch.service
 StartLimitIntervalSec=300
 StartLimitBurst=5
 

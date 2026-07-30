@@ -27,6 +27,38 @@ journal lives in a RAM-backed ring buffer (`/run/log/journal`) rather than
 on disk, so logs never contribute to SD card wear either, whether or not
 the root filesystem itself is read-only.
 
+## Config override from the Mac, and the golden-config fallback
+
+`systemd/jukebox-config-fetch.service` (installed as
+`/etc/systemd/system/jukebox-config-fetch.service`) runs once at boot,
+`Before=jukebox.service`, and fetches `~/.jukebox/config.ini` from the
+machine running the macOS "Music" app (`src/fetch_config_from_mac.py`),
+overwriting `src/config.ini` with it if it's there and different. This
+lets someone edit `config.ini` on the Mac (a normal always-writable
+desktop) instead of on this device directly. It's deliberately **not**
+sandboxed the way `jukebox.service` is — writing `config.ini` is its
+whole job, and `jukebox.service`'s own `ProtectSystem=strict` makes that
+impossible from inside that unit (confirmed the hard way: `EROFS`
+writing straight over `config.ini` from a sandboxed process, independent
+of whether the root filesystem's own overlay is read-only). A missing
+override file or unreachable Mac are both treated as "nothing to fetch",
+not an error — this unit always exits 0, so `jukebox.service` (`Wants=`,
+not `Requires=`, on it) always starts regardless.
+
+The fetch script does no validation of what it copies in beyond "is it
+non-empty" — `main.py`'s own startup is what decides whether the
+resulting `config.ini` is actually usable: it loads `config.ini` and
+runs it through `config.validate_config()` (every accessor that
+validates its own section) before doing anything else, and falls back to
+`src/config.golden.ini` — a known-good copy, git-tracked, never written
+to by anything at runtime — if that fails for any reason. A message
+briefly flashes on the two displays (`Config` / `Using Golden`) whenever
+that fallback kicks in. If `config.ini` itself is too broken to even
+tell `fetch_config_from_mac.py` how to reach the Mac (no readable
+`[sshWorker]` section), that script falls back to reading
+`[sshWorker]` from `config.golden.ini` too — so a bad fetch is
+self-healing on the next boot rather than a dead end.
+
 ## Managing the service
 
 ```sh
@@ -36,6 +68,15 @@ journalctl -u jukebox -n 100      # last 100 lines
 sudo systemctl restart jukebox    # e.g. after editing config.ini or pulling new code
 sudo systemctl stop jukebox       # stop without disabling autostart
 sudo systemctl disable jukebox    # stop autostarting on boot
+```
+
+`jukebox-config-fetch.service` is a `Type=oneshot` -- it runs once and exits,
+so `status`/logs work the same way but `restart`/`stop` aren't meaningful
+day-to-day states for it:
+
+```sh
+sudo systemctl start jukebox-config-fetch   # re-run the fetch on demand, without a reboot
+journalctl -u jukebox-config-fetch -n 50    # did it find/apply an override last boot?
 ```
 
 Because `Storage=volatile`, `journalctl -u jukebox` only shows logs since

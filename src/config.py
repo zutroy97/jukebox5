@@ -7,6 +7,13 @@ from music_app_ssh_worker import default_airplay_device_name
 
 DISPLAY_FIELDS = ("artist", "title", "album")
 
+# Known-good fallback config.ini, git-tracked and never written to by
+# anything at runtime (see fetch_config_from_mac.py and main.py's startup)
+# -- what the app falls back to running on if config.ini itself turns out
+# to be missing or corrupted (e.g. a bad fetch from the Mac, or a manual
+# edit gone wrong).
+GOLDEN_CONFIG_PATH = os.path.join(os.path.dirname(__file__), "config.golden.ini")
+
 
 CHARACTER_REVEAL_ANIMATIONS = ("immediate", "segment")
 
@@ -281,3 +288,26 @@ class Config:
             raise ValueError(f"[display] fields has unknown value(s) {unknown}; valid values are {DISPLAY_FIELDS}")
 
         return fields or list(DISPLAY_FIELDS)
+
+
+def validate_config(config: "Config") -> None:
+    """Exercises every accessor that validates its own section, raising
+    whatever the first bad one raises. Config itself only validates a
+    section lazily, the first time its accessor is called (see e.g.
+    logging()/display_fields()/ssh_worker() above) -- this is what lets
+    main.py's startup (and fetch_config_from_mac.py, indirectly) decide
+    whether a config.ini is actually usable before committing to it,
+    rather than discovering a bad section minutes into a run."""
+    config.panel()
+    config.mqtt()
+    config.ssh_worker()
+    config.track_selection_feedback()
+    config.playback_pause_flash()
+    config.display_fields()
+    config.shutdown_display()
+    config.logging()
+    # 8/12 match the two alphanumeric displays' actual widths (see
+    # led0/led1 in main.py) -- the only widths animation_for_width() is
+    # ever actually called with.
+    config.animation_for_width(8)
+    config.animation_for_width(12)
