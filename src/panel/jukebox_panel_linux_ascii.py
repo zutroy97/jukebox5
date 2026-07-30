@@ -10,7 +10,7 @@ class JukeboxPanelLinuxAsciiModule(JukeboxPanelInputBase, JukeboxPanelOutputBase
     using its line-based text protocol ("w3 <text>\\n", "BTN:<c>\\n", ...) --
     the same proven protocol JukeboxPanelArduinoSerial speaks over a serial
     port, just over the character device file instead. See
-    jukeboxPanelModule/WIRING.md for the wire-level command list.
+    linux/jukeboxPanelModule/WIRING.md for the wire-level command list.
     """
 
     READ_CHUNK = 64

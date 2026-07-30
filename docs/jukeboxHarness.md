@@ -33,8 +33,8 @@ Wires+--5--4--3--2--1--+
 
 The "Pi GPIO (BCM)" / "Pi Header Pin #" columns are the current Raspberry Pi
 side of the harness, via the TXS0108E level shifter described in
-[`jukeboxPanelModule/WIRING.md`](../jukeboxPanelModule/WIRING.md) and
-matching the `gpio_*` module params in `jukeboxPanelModule/jukebox_panel.c`
+[`linux/jukeboxPanelModule/WIRING.md`](../linux/jukeboxPanelModule/WIRING.md) and
+matching the `gpio_*` module params in `linux/jukeboxPanelModule/jukebox_panel.c`
 (pin numbers are physical/board pin numbers on the 40-pin GPIO header, not
 BCM or wiringPi numbering).
 

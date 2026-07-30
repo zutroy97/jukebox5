@@ -84,7 +84,7 @@ Key observed characteristics of the corruption:
 
 ## Current leading hypothesis: the TXS0108E level shifter
 
-Per `jukeboxPanelModule/WIRING.md`, a **TXS0108E** (auto-direction-sensing,
+Per `linux/jukeboxPanelModule/WIRING.md`, a **TXS0108E** (auto-direction-sensing,
 8-channel) level shifter sits between the Pi's 3.3V GPIO and the panel's
 5V logic. This chip has a well-documented (TI-acknowledged, widely
 reported) weakness: it's designed for slow/quasi-bidirectional signals
@@ -207,7 +207,7 @@ running the app end-to-end, the keypad appeared completely dead through
 this new module — but a raw `cat /dev/jukebox_panel` showed the kernel
 driver *was* seeing every press correctly.
 
-Root cause, in `jukeboxPanelModule/jukebox_panel.c`'s `queue_button_event()`:
+Root cause, in `linux/jukeboxPanelModule/jukebox_panel.c`'s `queue_button_event()`:
 
 ```c
 char event[6];
@@ -226,13 +226,13 @@ until this module existed — `JukeboxPanelArduinoSerial` never hit it since
 it talks to different (correctly-behaved) Arduino firmware over serial,
 not this kernel driver.
 
-Fix: `char event[7]`. Rebuilt (`make` in `jukeboxPanelModule/`), reloaded
+Fix: `char event[7]`. Rebuilt (`make` in `linux/jukeboxPanelModule/`), reloaded
 (`sudo rmmod jukebox_panel && sudo insmod jukebox_panel.ko` — needs to be
 run manually, no passwordless sudo on this box). Confirmed via raw `cat`
 (now shows proper `BTN:X\n` lines with `cat -A`) and via the new Python
 module directly (all 12 keys received correctly by `onButtonPress`). **Not
 yet committed** — sitting as a working-tree change in
-`jukeboxPanelModule/jukebox_panel.c`, along with the new
+`linux/jukeboxPanelModule/jukebox_panel.c`, along with the new
 `jukebox_panel_linux_ascii.py` and the `main.py`/`build_panel()` wiring.
 
 ### Open problem: display corruption is back, and worse than before

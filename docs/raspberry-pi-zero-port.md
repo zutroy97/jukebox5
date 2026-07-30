@@ -36,7 +36,7 @@ kernel `6.18.33+rpt-rpi-v6`.
 
 ## Confirmed portable/working (verified directly on jukebox0, not just assumed)
 
-- `jukeboxPanelModule/` (the keypad kernel driver) uses the generic
+- `linux/jukeboxPanelModule/` (the keypad kernel driver) uses the generic
   BCM-numbered `gpio_request()` API, not hardcoded memory addresses — same
   interface across the whole 40-pin Pi lineup. Built clean with `make`
   against the already-installed matching kernel headers (no extra headers
@@ -88,9 +88,9 @@ kernel `6.18.33+rpt-rpi-v6`.
   during testing. Built and loaded on `jukebox0`; verified end-to-end
   with a full 12-key round, each key pressed twice with genuine
   separation — all 24 presses registered correctly. **Currently
-  uncommitted** in `jukeboxPanelModule/jukebox_panel_bin.c` on both this
+  uncommitted** in `linux/jukeboxPanelModule/jukebox_panel_bin.c` on both this
   checkout and `jukebox0`'s (the earlier pull-up change is folded into
-  this same uncommitted diff). `jukeboxPanelModule/jukebox_panel.c` (the
+  this same uncommitted diff). `linux/jukeboxPanelModule/jukebox_panel.c` (the
   dormant ASCII-protocol sibling driver, not currently loaded) has the
   same underlying design issue and was deliberately left untouched since
   it's unused.
@@ -141,7 +141,7 @@ kernel `6.18.33+rpt-rpi-v6`.
    done, all packages via prebuilt wheels (see above), verified core imports
    (`paramiko`, `paho.mqtt`, `busio`/`board`, `adafruit_ht16k33`) all work.
 6. ✅ **Rebuild and install the kernel module** — done:
-   `cd jukeboxPanelModule && make && sudo make install`, then
+   `cd linux/jukeboxPanelModule && make && sudo make install`, then
    `sudo cp 99-jukebox-panel.rules /etc/udev/rules.d/` +
    `echo jukebox_panel_bin | sudo tee /etc/modules-load.d/jukebox-panel.conf`.
    Also fixed `jukebox-panel.modules-load.conf` in the repo itself, which
@@ -158,7 +158,7 @@ kernel `6.18.33+rpt-rpi-v6`.
    for the caveat on quick sequential taps, not yet resolved on this
    assembly). Same physical GPIO/I2C wiring as the Pi 3 box applies; BCM
    pin numbering is consistent across the Pi lineup, see
-   `jukeboxPanelModule/WIRING.md`. **A custom PCB is planned to replace
+   `linux/jukeboxPanelModule/WIRING.md`. **A custom PCB is planned to replace
    this breadboard assembly** — re-verify keypad reliability once it's in.
 8. ⬜ **Adapt `src/config.ini`** for the new host — not done yet: `[mqtt]`
    broker address (wherever it actually runs — locally on the Zero, or

@@ -2,7 +2,7 @@
 """Live-decodes raw keypad signatures from /dev/jukebox_panel_bin.
 
 jukebox_panel_bin.c deliberately reports raw 16-bit scan signatures rather
-than decoded characters (see jukeboxPanelModule/jukebox_panel_bin_protocol.h)
+than decoded characters (see linux/jukeboxPanelModule/jukebox_panel_bin_protocol.h)
 -- translating a signature is the caller's job. This is that translation,
 useful for watching what the panel actually reports key by key.
 
@@ -18,7 +18,7 @@ DEFAULT_DEVICE = "/dev/jukebox_panel_bin"
 
 # Matches src/panel/jukebox_panel_linux_binary.py's remapped table: digit
 # labels 0<=>5, 1<=>6, 2<=>7, 3<=>8, 4<=>9 (R/P unchanged) relative to
-# jukeboxPanelModule/jukebox_panel.c's raw_to_key().
+# linux/jukeboxPanelModule/jukebox_panel.c's raw_to_key().
 SIGNATURES = {
     0x7dff: 'P',
     0xfddf: '6',

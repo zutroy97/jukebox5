@@ -83,7 +83,7 @@ fallback if only smaller values are available.
 4. Load `jukebox_panel` (no code changes needed — this is purely a
    signal-conditioning swap, the driver just reads GPIO25/GPIO5 as
    before) and confirm all 12 keys (`0-9`, `R`, `P`) register via
-   `cat /dev/jukebox_panel`, per `jukeboxPanelModule/WIRING.md`'s
+   `cat /dev/jukebox_panel`, per `linux/jukeboxPanelModule/WIRING.md`'s
    validation steps.
 5. Measure actual Vout at each Pi GPIO pin under both idle and
    key-held states with a meter, to confirm it matches the calculated

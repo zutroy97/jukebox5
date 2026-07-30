@@ -5,7 +5,7 @@ from typing import Optional
 
 from panel.panel_input_base import JukeboxPanelInputBase, JukeboxPanelOutputBase
 
-# Mirrors jukeboxPanelModule/jukebox_panel_bin_protocol.h's struct jbp_bin_cmd
+# Mirrors linux/jukeboxPanelModule/jukebox_panel_bin_protocol.h's struct jbp_bin_cmd
 # exactly: cmd(1) + target(1) + pad(2) + value(4) = 8 bytes.
 _CMD_FORMAT = "=BBxxI"
 
@@ -19,7 +19,7 @@ JBP_TARGET_4DIGIT = 1
 JBP_LED_RIGHT = 0  # led0
 JBP_LED_LEFT = 1   # led1
 
-# Based on jukeboxPanelModule/jukebox_panel.c's raw_to_key() table, with the
+# Based on linux/jukeboxPanelModule/jukebox_panel.c's raw_to_key() table, with the
 # digit labels remapped 0<=>5, 1<=>6, 2<=>7, 3<=>8, 4<=>9 (R/P unchanged) --
 # a deliberate relabeling, not a bug fix; jukebox_panel.c's own table is
 # intentionally left as-is. The kernel driver reports raw signatures rather
@@ -42,7 +42,7 @@ _SIGNATURES = {
     0xbdff: 'R',
 }
 
-# Mirrors jukeboxPanelModule/jukebox_panel.c's jukebox_characters[] table
+# Mirrors linux/jukeboxPanelModule/jukebox_panel.c's jukebox_characters[] table
 # verbatim (index 0-9 = '0'-'9', 10-35 = 'a'-'z').
 _JUKEBOX_CHARACTERS = (
     119, 65, 59, 107, 77, 110, 126, 67, 127, 111,   # 0-9
@@ -144,7 +144,7 @@ def _pack_text(text: str) -> int:
 class JukeboxPanelLinuxBinaryModule(JukeboxPanelInputBase, JukeboxPanelOutputBase):
     """Talks to the jukebox_panel_bin kernel module over /dev/jukebox_panel_bin
     using its fixed-size binary command protocol (see
-    jukeboxPanelModule/jukebox_panel_bin_protocol.h) -- a separate,
+    linux/jukeboxPanelModule/jukebox_panel_bin_protocol.h) -- a separate,
     independently-loadable alternative to jukebox_panel.c's line-based text
     protocol that JukeboxPanelLinuxAsciiModule speaks; only one of the two
     kernel modules is ever loaded at a time.
