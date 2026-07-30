@@ -572,6 +572,10 @@ def main(config: Config):
         led0.flush()
         led1.write(shutdown_display.value_text)
         led1.flush()
+        logger.info(
+            "Shutdown display applied: alpha=%r value=%r, panel off",
+            shutdown_display.alpha_text, shutdown_display.value_text,
+        )
 
     def onSigterm(signum, frame) -> None:
         # `systemctl stop` sends SIGTERM, not SIGINT -- Python's default
