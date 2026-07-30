@@ -171,12 +171,14 @@ kernel `6.18.33+rpt-rpi-v6`.
    Still open: whether it actually stays local long-term vs. left on the
    existing box, and `shairport-sync` placement hasn't been decided or
    installed at all yet.
-10. ⬜ **Adapt the systemd unit** (`systemd/jukebox.service`) — not done
-    yet. The `ProtectSystem=strict`/`ProtectHome=read-only`/
-    volatile-journald approach from `docs/deployment.md` should carry over
-    unchanged; just needs `User=`/paths updated for wherever the checkout
-    lives on the Zero (currently `/home/simonbs/jukebox5`, matches the Pi 3
-    layout).
+10. ✅ **Adapt the systemd unit** (`systemd/jukebox.service`) — done. Since
+    `jukebox0`'s checkout already lives at `/home/simonbs/jukebox5` under
+    `simonbs`, matching the Pi 3 layout, the unit needed no edits — just
+    installed as-is: copied to `/etc/systemd/system/jukebox.service`,
+    `systemctl daemon-reload`, `enable`, `start`. Confirmed running
+    (`systemctl status` active, journal shows SSH-to-Mac connecting and 198
+    playlist tracks loading) and enabled for boot
+    (`multi-user.target.wants/jukebox.service` symlink created).
 11. ⬜ **Watch memory closely once everything's running together** — 512MB
     total, shared between the jukebox app, and possibly mosquitto and
     shairport-sync if they're colocated too. The jukebox app alone is tiny
