@@ -1,5 +1,6 @@
 import argparse
 import json
+import os
 import signal
 import socket
 import sys
@@ -14,6 +15,7 @@ from animations.abstract_character_reveal_animator import (
     SegmentByCharacterRevealAnimator,
 )
 from config import Config, PanelConfig
+from config_override import check_and_apply_override
 from observers import UpdateEventType, Coordinator, SingleTextLineAnimatedObserver, KeyValueTextObserver
 from panel.panel_input_base import JukeboxPanelArduinoSerial
 from panel.jukebox_panel_linux_ascii import JukeboxPanelLinuxAsciiModule
@@ -614,7 +616,8 @@ if __name__ == '__main__':
         help="Path to the config INI file (default: src/config.ini)",
     )
     args = arg_parser.parse_args()
-    config = Config(args.config_path)
+    config_path = args.config_path or os.path.join(os.path.dirname(__file__), "config.ini")
+    config = Config(config_path)
 
     formatter = logging.Formatter(
         fmt='%(asctime)s.%(msecs)03d %(name)s %(levelname)s %(message)s',
@@ -625,5 +628,29 @@ if __name__ == '__main__':
     handler.setFormatter(formatter)
     logger.addHandler(handler)
     logger.setLevel(config.logging().level)
+
+    # Checks ~/.jukebox/config.ini on the Mac (see config_override.py) for
+    # a newer config to run with -- a person can edit that instead of
+    # config.ini on jukebox0 itself, whose root filesystem may be
+    # read-only. A valid, different override is adopted and this process
+    # restarted via execv so the rest of startup (MQTT client, panel
+    # driver, displays, ...) is built fresh from it rather than trying to
+    # hot-swap already-constructed objects. An invalid override is never
+    # adopted -- just flashed briefly on the two displays -- and does not
+    # stop the jukebox starting normally on the config that was already
+    # there.
+    override_result = check_and_apply_override(config, config_path)
+    if override_result.applied:
+        logger.info("Applied a new config override from the Mac; restarting")
+        os.execv(sys.executable, [sys.executable] + sys.argv)
+    elif override_result.error is not None:
+        logger.warning("Ignoring invalid config override from the Mac: %s", override_result.error)
+        led0.clear()
+        led0.write("Config")
+        led0.flush()
+        led1.clear()
+        led1.write("Not Applied")
+        led1.flush()
+        time.sleep(5)
 
     main(config)
