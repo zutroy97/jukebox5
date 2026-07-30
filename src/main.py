@@ -568,8 +568,19 @@ def main(config: Config):
         coordinator.shutdown()
         panel.Off()
         shutdown_display = config.shutdown_display()
+        # coordinator.shutdown() only *requests* each observer clear its
+        # display (an async state-machine transition normally applied on
+        # the next observer.draw() -- see Coordinator._loop, which exits
+        # immediately after the shutdown task runs and never reaches that
+        # draw() call). So the driver-level clear() below is not
+        # redundant -- it's the only thing that actually blanks the
+        # display and resets the write cursor to 0 before the shutdown
+        # text goes up; skipping it left stale characters (and a
+        # leftover cursor position) mixed in with the new text.
+        led0.clear()
         led0.write(shutdown_display.alpha_text)
         led0.flush()
+        led1.clear()
         led1.write(shutdown_display.value_text)
         led1.flush()
         logger.info(
