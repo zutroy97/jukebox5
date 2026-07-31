@@ -1,12 +1,20 @@
 [Unit]
 Description=Jukebox5 application
-After=network-online.target mosquitto.service jukebox-config-fetch.service
+# Full boot order this depends on: mosquitto, then shairport-sync (see
+# systemd/shairport-sync.service.d/override.conf for why shairport-sync
+# itself needs to come after mosquitto), then this unit -- so shairport-sync
+# has already had a chance to establish both its MQTT connection and an
+# active AirPlay session before the jukebox starts subscribing, rather than
+# racing it.
+After=network-online.target mosquitto.service shairport-sync.service jukebox-config-fetch.service
 Wants=network-online.target
-# Not Requires= -- jukebox-config-fetch.service always exits 0 (Mac
-# unreachable/no override present are not failures), but Wants= still
-# means "start it first if you're going to start it at all" without
-# making this unit's own startup depend on that one succeeding.
-Wants=jukebox-config-fetch.service
+# Not Requires= for shairport-sync.service/jukebox-config-fetch.service --
+# both are still fine to start after if they're not up for some reason
+# (song metadata degrades gracefully to the SSH-based fallback in main.py;
+# jukebox-config-fetch.service always exits 0 regardless). Wants= still
+# means "start them first if they're going to start at all" without making
+# this unit's own startup depend on either succeeding.
+Wants=shairport-sync.service jukebox-config-fetch.service
 StartLimitIntervalSec=300
 StartLimitBurst=5
 
