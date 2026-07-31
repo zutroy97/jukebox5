@@ -13,7 +13,7 @@ from animations.abstract_character_reveal_animator import (
     CharacterRevealImmediatelyAnimator,
     SegmentByCharacterRevealAnimator,
 )
-from config import Config, PanelConfig
+from config import Config, GOLDEN_CONFIG_PATH, PanelConfig, validate_config
 from observers import UpdateEventType, Coordinator, SingleTextLineAnimatedObserver, KeyValueTextObserver
 from panel.panel_input_base import JukeboxPanelArduinoSerial
 from panel.jukebox_panel_linux_ascii import JukeboxPanelLinuxAsciiModule
@@ -614,7 +614,21 @@ if __name__ == '__main__':
         help="Path to the config INI file (default: src/config.ini)",
     )
     args = arg_parser.parse_args()
-    config = Config(args.config_path)
+
+    # config.ini may have just been overwritten by
+    # systemd/jukebox-config-fetch.service, which runs before this unit
+    # and does no validation of its own -- so config.ini itself might be
+    # missing, unparseable, or missing a required section right now. Fall
+    # back to the known-good config.golden.ini rather than crash-looping
+    # on a bad fetch; config_load_error is logged and shown once the
+    # logger/displays below are set up.
+    config_load_error = None
+    try:
+        config = Config(args.config_path)
+        validate_config(config)
+    except Exception as e:
+        config_load_error = str(e)
+        config = Config(GOLDEN_CONFIG_PATH)
 
     formatter = logging.Formatter(
         fmt='%(asctime)s.%(msecs)03d %(name)s %(levelname)s %(message)s',
@@ -625,5 +639,15 @@ if __name__ == '__main__':
     handler.setFormatter(formatter)
     logger.addHandler(handler)
     logger.setLevel(config.logging().level)
+
+    if config_load_error is not None:
+        logger.warning("config.ini is invalid (%s); falling back to config.golden.ini", config_load_error)
+        led0.clear()
+        led0.write("Config")
+        led0.flush()
+        led1.clear()
+        led1.write("Using Golden")
+        led1.flush()
+        time.sleep(5)
 
     main(config)

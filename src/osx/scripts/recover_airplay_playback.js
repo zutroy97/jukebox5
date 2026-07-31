@@ -51,10 +51,21 @@
     return deviceName + " airplay selected, but not available";
   }
 
-  if (!device.selected()) {
-    device.selected = true;
-    device.soundVolume = 60;
-  }
+  // Always force a deselect/reselect cycle rather than only selecting when
+  // device.selected() is false -- confirmed live (jukebox0, 2026-07-30)
+  // that Music.app can get stuck reporting selected=true (and playerState
+  // "playing") while the actual RTSP/AirPlay session has silently died --
+  // e.g. the Pi rebooted mid-session -- with nothing in Music.app's own
+  // scripting surface distinguishing that from a genuinely live
+  // connection. This script only ever runs as a last resort already
+  // (triggered because the MQTT remote-control path went unacknowledged),
+  // so the brief interruption from an unconditional toggle is an
+  // acceptable cost for actually fixing a stuck session instead of
+  // silently no-op'ing on state that only *looks* fine.
+  device.selected = false;
+  delay(1);
+  device.selected = true;
+  device.soundVolume = 60;
 
   if (Music.playerState() === "paused") {
     Music.play();
