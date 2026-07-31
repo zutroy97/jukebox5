@@ -257,6 +257,11 @@ def main(config: Config):
 
             threading.Timer(mqtt_config.remote_command_timeout_s, checkPlaypauseEffect).start()
 
+    # led0/led1 are constructed at module level (see above), before config
+    # is available -- applied here instead of at construction time.
+    led0.set_brightness(config.display_brightness())
+    led1.set_brightness(config.display_brightness())
+
     panel = build_panel(config.panel(), onPanelButtonPress)
     feedback_config = config.track_selection_feedback()
     pause_flash_config = config.playback_pause_flash()

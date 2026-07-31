@@ -10,7 +10,7 @@ class led16_display(abstract_line_display.AbstractSingleLineDisplay):
         self._logger = logging.getLogger(__class__.__name__)
         addr = kwargs.get('addr', (0x72, 0x73, 0x74))
         self._display = Seg14x4Native(addr, bus_number=kwargs.get('bus_number', 1), bus=kwargs.get('bus'))
-        self._display.brightness = 0.20
+        self._display.brightness = kwargs.get('brightness', 0.20)
         self._width = len(self._display.i2c_device) * 4
         self._position = 0
         self._pending_show = False  # true when the buffer has unsent changes

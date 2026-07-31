@@ -7,6 +7,11 @@ from music_app_ssh_worker import default_airplay_device_name
 
 DISPLAY_FIELDS = ("artist", "title", "album")
 
+# Matches led16_display.py's own hardcoded default, kept in sync so
+# omitting [display] brightness entirely behaves the same as it always
+# has.
+DEFAULT_DISPLAY_BRIGHTNESS = 0.20
+
 # Known-good fallback config.ini, git-tracked and never written to by
 # anything at runtime (see fetch_config_from_mac.py and main.py's startup)
 # -- what the app falls back to running on if config.ini itself turns out
@@ -136,7 +141,8 @@ class Config:
       - `mqtt`: shairport-sync MQTT broker connection settings.
       - `display`: has a `fields` key listing which song fields (artist,
         title, album) to cycle through on the animated displays, and in
-        what order.
+        what order, plus a `brightness` key (0.0-1.0, default 0.20) for
+        both 14-segment alphanumeric displays.
       - `trackSelectionFeedback`: blink/error timing shown on the 4-digit
         display after a keypad track selection completes.
       - `playbackPauseFlash`: flash timing for the 4-digit display while
@@ -289,6 +295,16 @@ class Config:
 
         return fields or list(DISPLAY_FIELDS)
 
+    def display_brightness(self) -> float:
+        if "display" not in self._parser:
+            return DEFAULT_DISPLAY_BRIGHTNESS
+
+        brightness = self._parser["display"].getfloat("brightness", fallback=DEFAULT_DISPLAY_BRIGHTNESS)
+        if not 0.0 <= brightness <= 1.0:
+            raise ValueError(f"[display] brightness {brightness} is invalid; must be between 0.0 and 1.0")
+
+        return brightness
+
 
 def validate_config(config: "Config") -> None:
     """Exercises every accessor that validates its own section, raising
@@ -304,6 +320,7 @@ def validate_config(config: "Config") -> None:
     config.track_selection_feedback()
     config.playback_pause_flash()
     config.display_fields()
+    config.display_brightness()
     config.shutdown_display()
     config.logging()
     # 8/12 match the two alphanumeric displays' actual widths (see
