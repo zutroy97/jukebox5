@@ -59,6 +59,28 @@ tell `fetch_config_from_mac.py` how to reach the Mac (no readable
 `[sshWorker]` from `config.golden.ini` too — so a bad fetch is
 self-healing on the next boot rather than a dead end.
 
+## shairport-sync/mosquitto boot-order fix
+
+`shairport-sync` (the AirPlay receiver, a system package -- not this repo)
+has no ordering against `mosquitto` in its vendor unit, so on a cold boot
+it can lose the race and try its one-shot MQTT connect before mosquitto is
+listening. It doesn't retry after that -- audio keeps working, but all
+song/artist/title metadata silently stops flowing to the jukebox for the
+rest of that boot, with nothing locally indicating anything is wrong.
+Confirmed happening on jukebox0.
+
+Fixed with a systemd drop-in (`systemd/shairport-sync.service.d/override.conf`
+in this repo, installed as
+`/etc/systemd/system/shairport-sync.service.d/override.conf`) rather than
+editing the vendor unit directly, which a package upgrade would silently
+discard:
+
+```sh
+sudo mkdir -p /etc/systemd/system/shairport-sync.service.d
+sudo cp systemd/shairport-sync.service.d/override.conf /etc/systemd/system/shairport-sync.service.d/
+sudo systemctl daemon-reload
+```
+
 ## Managing the service
 
 ```sh
