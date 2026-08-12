@@ -5,363 +5,6 @@
 	(uuid "d5952d23-7be9-40c8-aefc-0ecf82dd4124")
 	(paper "A4")
 	(lib_symbols
-		(symbol "Connector:8P8C"
-			(pin_names
-				(offset 1.016)
-			)
-			(exclude_from_sim no)
-			(in_bom yes)
-			(on_board yes)
-			(in_pos_files yes)
-			(duplicate_pin_numbers_are_jumpers no)
-			(property "Reference" "J"
-				(at -5.08 13.97 0)
-				(show_name no)
-				(do_not_autoplace no)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-					(justify right)
-				)
-			)
-			(property "Value" "8P8C"
-				(at 2.54 13.97 0)
-				(show_name no)
-				(do_not_autoplace no)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-					(justify left)
-				)
-			)
-			(property "Footprint" ""
-				(at 0 0.635 90)
-				(show_name no)
-				(do_not_autoplace no)
-				(hide yes)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-				)
-			)
-			(property "Datasheet" ""
-				(at 0 0.635 90)
-				(show_name no)
-				(do_not_autoplace no)
-				(hide yes)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-				)
-			)
-			(property "Description" "RJ connector, 8P8C (8 positions 8 connected), RJ31/RJ32/RJ33/RJ34/RJ35/RJ41/RJ45/RJ49/RJ61"
-				(at 0 0 0)
-				(show_name no)
-				(do_not_autoplace no)
-				(hide yes)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-				)
-			)
-			(property "ki_keywords" "8P8C RJ socket connector"
-				(at 0 0 0)
-				(show_name no)
-				(do_not_autoplace no)
-				(hide yes)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-				)
-			)
-			(property "ki_fp_filters" "8P8C* RJ31* RJ32* RJ33* RJ34* RJ35* RJ41* RJ45* RJ49* RJ61*"
-				(at 0 0 0)
-				(show_name no)
-				(do_not_autoplace no)
-				(hide yes)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-				)
-			)
-			(symbol "8P8C_0_1"
-				(polyline
-					(pts
-						(xy -6.35 1.905) (xy -5.08 1.905) (xy -5.08 1.905)
-					)
-					(stroke
-						(width 0)
-						(type default)
-					)
-					(fill
-						(type none)
-					)
-				)
-				(polyline
-					(pts
-						(xy -6.35 0.635) (xy -5.08 0.635) (xy -5.08 0.635)
-					)
-					(stroke
-						(width 0)
-						(type default)
-					)
-					(fill
-						(type none)
-					)
-				)
-				(polyline
-					(pts
-						(xy -6.35 -0.635) (xy -5.08 -0.635) (xy -5.08 -0.635)
-					)
-					(stroke
-						(width 0)
-						(type default)
-					)
-					(fill
-						(type none)
-					)
-				)
-				(polyline
-					(pts
-						(xy -6.35 -1.905) (xy -5.08 -1.905) (xy -5.08 -1.905)
-					)
-					(stroke
-						(width 0)
-						(type default)
-					)
-					(fill
-						(type none)
-					)
-				)
-				(polyline
-					(pts
-						(xy -6.35 -3.175) (xy -5.08 -3.175) (xy -5.08 -3.175)
-					)
-					(stroke
-						(width 0)
-						(type default)
-					)
-					(fill
-						(type none)
-					)
-				)
-				(polyline
-					(pts
-						(xy -6.35 -4.445) (xy -6.35 6.985) (xy 3.81 6.985) (xy 3.81 4.445) (xy 5.08 4.445) (xy 5.08 3.175)
-						(xy 6.35 3.175) (xy 6.35 -0.635) (xy 5.08 -0.635) (xy 5.08 -1.905) (xy 3.81 -1.905) (xy 3.81 -4.445)
-						(xy -6.35 -4.445) (xy -6.35 -4.445)
-					)
-					(stroke
-						(width 0)
-						(type default)
-					)
-					(fill
-						(type none)
-					)
-				)
-				(polyline
-					(pts
-						(xy -5.08 5.715) (xy -6.35 5.715)
-					)
-					(stroke
-						(width 0)
-						(type default)
-					)
-					(fill
-						(type none)
-					)
-				)
-				(polyline
-					(pts
-						(xy -5.08 4.445) (xy -6.35 4.445)
-					)
-					(stroke
-						(width 0)
-						(type default)
-					)
-					(fill
-						(type none)
-					)
-				)
-				(polyline
-					(pts
-						(xy -5.08 3.175) (xy -6.35 3.175) (xy -6.35 3.175)
-					)
-					(stroke
-						(width 0)
-						(type default)
-					)
-					(fill
-						(type none)
-					)
-				)
-				(rectangle
-					(start 7.62 12.7)
-					(end -7.62 -10.16)
-					(stroke
-						(width 0.254)
-						(type default)
-					)
-					(fill
-						(type background)
-					)
-				)
-			)
-			(symbol "8P8C_1_1"
-				(pin passive line
-					(at 10.16 -7.62 180)
-					(length 2.54)
-					(name ""
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-					(number "1"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-				)
-				(pin passive line
-					(at 10.16 -5.08 180)
-					(length 2.54)
-					(name ""
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-					(number "2"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-				)
-				(pin passive line
-					(at 10.16 -2.54 180)
-					(length 2.54)
-					(name ""
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-					(number "3"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-				)
-				(pin passive line
-					(at 10.16 0 180)
-					(length 2.54)
-					(name ""
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-					(number "4"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-				)
-				(pin passive line
-					(at 10.16 2.54 180)
-					(length 2.54)
-					(name ""
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-					(number "5"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-				)
-				(pin passive line
-					(at 10.16 5.08 180)
-					(length 2.54)
-					(name ""
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-					(number "6"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-				)
-				(pin passive line
-					(at 10.16 7.62 180)
-					(length 2.54)
-					(name ""
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-					(number "7"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-				)
-				(pin passive line
-					(at 10.16 10.16 180)
-					(length 2.54)
-					(name ""
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-					(number "8"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-				)
-			)
-			(embedded_fonts no)
-		)
 		(symbol "Connector:Conn_01x03_Pin"
 			(pin_names
 				(offset 1.016)
@@ -3364,12 +3007,6 @@
 		)
 	)
 	(junction
-		(at 238.76 60.96)
-		(diameter 0)
-		(color 0 0 0 0)
-		(uuid "017678ee-db13-4027-86d2-3a1266b198e2")
-	)
-	(junction
 		(at 208.28 120.65)
 		(diameter 0)
 		(color 0 0 0 0)
@@ -3394,12 +3031,6 @@
 		(uuid "1b3f841c-02b7-4a36-add8-d4f69e18d69d")
 	)
 	(junction
-		(at 208.28 45.72)
-		(diameter 0)
-		(color 0 0 0 0)
-		(uuid "21b473d5-a5cf-41e6-8d77-a22fe967c4d5")
-	)
-	(junction
 		(at 205.74 118.11)
 		(diameter 0)
 		(color 0 0 0 0)
@@ -3412,22 +3043,10 @@
 		(uuid "2b9f1988-6674-46ea-ba5a-02e26504c859")
 	)
 	(junction
-		(at 238.76 55.88)
-		(diameter 0)
-		(color 0 0 0 0)
-		(uuid "2ea42598-8684-4448-a213-cfa2d51d221f")
-	)
-	(junction
 		(at 198.12 76.2)
 		(diameter 0)
 		(color 0 0 0 0)
 		(uuid "3672c8d1-8ea3-4962-b4cc-6df5e5093a20")
-	)
-	(junction
-		(at 238.76 53.34)
-		(diameter 0)
-		(color 0 0 0 0)
-		(uuid "390dda9b-274c-451b-a8f9-df8a47c06996")
 	)
 	(junction
 		(at 38.1 21.59)
@@ -3562,12 +3181,6 @@
 		(uuid "cd297419-e8f1-42c8-84ee-33b0254f513a")
 	)
 	(junction
-		(at 205.74 43.18)
-		(diameter 0)
-		(color 0 0 0 0)
-		(uuid "fb205760-fc86-47c6-86be-50c8e34e4bfa")
-	)
-	(junction
 		(at 203.2 134.62)
 		(diameter 0)
 		(color 0 0 0 0)
@@ -3582,16 +3195,6 @@
 			(type default)
 		)
 		(uuid "087a7e86-d2d5-4cab-a189-966c264a5c7d")
-	)
-	(wire
-		(pts
-			(xy 200.66 60.96) (xy 217.17 60.96)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "08eda7e1-4bbc-48a5-9ed6-5316bc0c9506")
 	)
 	(wire
 		(pts
@@ -3642,16 +3245,6 @@
 			(type default)
 		)
 		(uuid "0f114b6c-546a-43c4-81de-1d5f7401b761")
-	)
-	(wire
-		(pts
-			(xy 238.76 45.72) (xy 242.57 45.72)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "0f25584e-5dfc-4ca3-870e-4f028a5e835e")
 	)
 	(wire
 		(pts
@@ -3795,16 +3388,6 @@
 	)
 	(wire
 		(pts
-			(xy 238.76 60.96) (xy 238.76 55.88)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "2b7adee7-ea72-4830-96e5-8118465ae064")
-	)
-	(wire
-		(pts
 			(xy 39.37 102.87) (xy 39.37 68.58)
 		)
 		(stroke
@@ -3832,16 +3415,6 @@
 			(type default)
 		)
 		(uuid "31eefb7e-ff48-4c98-bae5-996b92e2a05d")
-	)
-	(wire
-		(pts
-			(xy 236.22 48.26) (xy 242.57 48.26)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "34311fdd-7669-4da7-83e5-5ad52bbf2964")
 	)
 	(wire
 		(pts
@@ -3915,16 +3488,6 @@
 	)
 	(wire
 		(pts
-			(xy 198.12 58.42) (xy 242.57 58.42)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "469350c9-4000-4577-8319-548c91b17810")
-	)
-	(wire
-		(pts
 			(xy 87.63 92.71) (xy 83.82 92.71)
 		)
 		(stroke
@@ -3942,16 +3505,6 @@
 			(type default)
 		)
 		(uuid "4c58a710-6136-4e51-96ba-ebc54d370bd5")
-	)
-	(wire
-		(pts
-			(xy 238.76 53.34) (xy 242.57 53.34)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "54412db5-827b-4d0c-aeff-0f8627181304")
 	)
 	(wire
 		(pts
@@ -4002,16 +3555,6 @@
 			(type default)
 		)
 		(uuid "6bbab765-6ac4-4362-a5da-9936622e515d")
-	)
-	(wire
-		(pts
-			(xy 236.22 45.72) (xy 236.22 48.26)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "70dfc59d-0660-461f-9570-306f59eed66a")
 	)
 	(wire
 		(pts
@@ -4095,16 +3638,6 @@
 	)
 	(wire
 		(pts
-			(xy 208.28 45.72) (xy 236.22 45.72)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "7f505d48-07ac-47d5-97a5-09691528957f")
-	)
-	(wire
-		(pts
 			(xy 198.12 53.34) (xy 198.12 58.42)
 		)
 		(stroke
@@ -4122,16 +3655,6 @@
 			(type default)
 		)
 		(uuid "89d92c8a-2237-4481-a921-97c4ea205fcd")
-	)
-	(wire
-		(pts
-			(xy 238.76 72.39) (xy 238.76 60.96)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "8a20e17e-7266-490c-8bae-0d7b893c2e29")
 	)
 	(wire
 		(pts
@@ -4202,16 +3725,6 @@
 			(type default)
 		)
 		(uuid "96dd6f3d-7eaa-4d4e-8aec-55ae2f516c96")
-	)
-	(wire
-		(pts
-			(xy 205.74 43.18) (xy 242.57 43.18)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "976691fe-10a3-4ec7-b15d-2d2262c5a2d8")
 	)
 	(wire
 		(pts
@@ -4295,16 +3808,6 @@
 	)
 	(wire
 		(pts
-			(xy 238.76 55.88) (xy 238.76 53.34)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "a90d318f-0580-4b88-837a-f6d5ddfc6dd4")
-	)
-	(wire
-		(pts
 			(xy 91.44 63.5) (xy 36.83 63.5)
 		)
 		(stroke
@@ -4365,16 +3868,6 @@
 	)
 	(wire
 		(pts
-			(xy 238.76 53.34) (xy 238.76 45.72)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "b503fa46-7952-4d44-a3c2-28bd6e67e4ac")
-	)
-	(wire
-		(pts
 			(xy 135.89 107.95) (xy 102.87 107.95)
 		)
 		(stroke
@@ -4392,16 +3885,6 @@
 			(type default)
 		)
 		(uuid "b86c5822-ee66-4e16-9992-ad126525e99c")
-	)
-	(wire
-		(pts
-			(xy 217.17 60.96) (xy 217.17 50.8)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "b87424eb-8e2a-4146-ba58-72de98369ba8")
 	)
 	(wire
 		(pts
@@ -4525,16 +4008,6 @@
 	)
 	(wire
 		(pts
-			(xy 238.76 55.88) (xy 242.57 55.88)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "d1a7c632-afb1-44a7-9014-7ab401930691")
-	)
-	(wire
-		(pts
 			(xy 38.1 24.13) (xy 38.1 26.67)
 		)
 		(stroke
@@ -4542,16 +4015,6 @@
 			(type default)
 		)
 		(uuid "d242361d-f75b-4c6e-9bc7-7e71c88fb752")
-	)
-	(wire
-		(pts
-			(xy 217.17 50.8) (xy 242.57 50.8)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "d2a37677-7a04-4392-8968-61bf16bbd477")
 	)
 	(wire
 		(pts
@@ -4702,16 +4165,6 @@
 			(type default)
 		)
 		(uuid "f16f18b0-15fc-49eb-8d53-93b37aa80201")
-	)
-	(wire
-		(pts
-			(xy 238.76 60.96) (xy 242.57 60.96)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "f57caa34-40f1-4bcf-b2d9-7fa3b2fe65dc")
 	)
 	(wire
 		(pts
@@ -4924,7 +4377,7 @@
 			(uuid "6111002e-cec5-46de-bd46-d15d60f0d047")
 		)
 		(instances
-			(project "JukeboxPanelV1"
+			(project "JukeboxPanelTest"
 				(path "/d5952d23-7be9-40c8-aefc-0ecf82dd4124"
 					(reference "#PWR08")
 					(unit 1)
@@ -5006,7 +4459,7 @@
 			(uuid "27ae1f4a-acb9-43b4-b183-828c9a1114bb")
 		)
 		(instances
-			(project "JukeboxPanelV1"
+			(project "JukeboxPanelTest"
 				(path "/d5952d23-7be9-40c8-aefc-0ecf82dd4124"
 					(reference "R4")
 					(unit 1)
@@ -5084,7 +4537,7 @@
 			(uuid "e569f0c1-960c-4d54-9e9f-fc7f4e77d445")
 		)
 		(instances
-			(project "JukeboxPanelV1"
+			(project "JukeboxPanelTest"
 				(path "/d5952d23-7be9-40c8-aefc-0ecf82dd4124"
 					(reference "#PWR015")
 					(unit 1)
@@ -5162,109 +4615,9 @@
 			(uuid "ebcd1c92-b421-4966-9e7d-f30b3d78a8ff")
 		)
 		(instances
-			(project "JukeboxPanelV1"
+			(project "JukeboxPanelTest"
 				(path "/d5952d23-7be9-40c8-aefc-0ecf82dd4124"
 					(reference "#PWR01")
-					(unit 1)
-				)
-			)
-		)
-	)
-	(symbol
-		(lib_id "Connector:8P8C")
-		(at 252.73 50.8 180)
-		(unit 1)
-		(body_style 1)
-		(exclude_from_sim no)
-		(in_bom yes)
-		(on_board yes)
-		(in_pos_files yes)
-		(dnp no)
-		(fields_autoplaced yes)
-		(uuid "3470f162-f19a-420c-b9a6-5ee1ee8c56de")
-		(property "Reference" "J7"
-			(at 261.62 50.7999 0)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify right)
-			)
-		)
-		(property "Value" "8P8C"
-			(at 261.62 53.3399 0)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify right)
-			)
-		)
-		(property "Footprint" "Connector_RJ:RJ45_Ninigi_GE"
-			(at 252.73 51.435 90)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Datasheet" ""
-			(at 252.73 51.435 90)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Description" "RJ connector, 8P8C (8 positions 8 connected), RJ31/RJ32/RJ33/RJ34/RJ35/RJ41/RJ45/RJ49/RJ61"
-			(at 252.73 50.8 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(pin "3"
-			(uuid "8d0931c7-e742-4b08-928b-84a01f66de13")
-		)
-		(pin "4"
-			(uuid "f2c0af64-000d-43f8-a195-2107e471524c")
-		)
-		(pin "5"
-			(uuid "8e6fd927-0f1a-4d6b-9f7f-addeae61778b")
-		)
-		(pin "6"
-			(uuid "f97b0d1b-c637-43be-b9a6-615f273334ce")
-		)
-		(pin "7"
-			(uuid "89aeaf25-7d1f-4c9d-acd7-50afe7aea8b7")
-		)
-		(pin "8"
-			(uuid "d99eedfb-0a51-4f43-a321-d3035b308eea")
-		)
-		(pin "1"
-			(uuid "c928d864-bb46-40fd-aabc-6c166e4c564d")
-		)
-		(pin "2"
-			(uuid "e2da0e3a-35ff-4e27-b70f-cb1245af7050")
-		)
-		(instances
-			(project "JukeboxPanelV1"
-				(path "/d5952d23-7be9-40c8-aefc-0ecf82dd4124"
-					(reference "J7")
 					(unit 1)
 				)
 			)
@@ -5340,7 +4693,7 @@
 			(uuid "db428e4b-6ce0-4fbf-a640-b36d19feca44")
 		)
 		(instances
-			(project "JukeboxPanelV1"
+			(project "JukeboxPanelTest"
 				(path "/d5952d23-7be9-40c8-aefc-0ecf82dd4124"
 					(reference "#PWR014")
 					(unit 1)
@@ -5440,7 +4793,7 @@
 			(uuid "f7c7967d-8044-4add-9850-0f07a162bfea")
 		)
 		(instances
-			(project "JukeboxPanelV1"
+			(project "JukeboxPanelTest"
 				(path "/d5952d23-7be9-40c8-aefc-0ecf82dd4124"
 					(reference "A4")
 					(unit 1)
@@ -5540,7 +4893,7 @@
 			(uuid "dbd6a1bf-d99f-4366-a128-b61ff83c9844")
 		)
 		(instances
-			(project "JukeboxPanelV1"
+			(project "JukeboxPanelTest"
 				(path "/d5952d23-7be9-40c8-aefc-0ecf82dd4124"
 					(reference "A5")
 					(unit 1)
@@ -5640,7 +4993,7 @@
 			(uuid "a9c95b7d-bb56-4a1f-819b-4372439b6752")
 		)
 		(instances
-			(project "JukeboxPanelV1"
+			(project "JukeboxPanelTest"
 				(path "/d5952d23-7be9-40c8-aefc-0ecf82dd4124"
 					(reference "A2")
 					(unit 1)
@@ -5723,7 +5076,7 @@
 			(uuid "23201faa-35ef-47e7-9169-6311989e933c")
 		)
 		(instances
-			(project "JukeboxPanelV1"
+			(project "JukeboxPanelTest"
 				(path "/d5952d23-7be9-40c8-aefc-0ecf82dd4124"
 					(reference "J5")
 					(unit 1)
@@ -5801,7 +5154,7 @@
 			(uuid "1f108865-c5b6-4cd9-8726-438e356306ad")
 		)
 		(instances
-			(project "JukeboxPanelV1"
+			(project "JukeboxPanelTest"
 				(path "/d5952d23-7be9-40c8-aefc-0ecf82dd4124"
 					(reference "#PWR06")
 					(unit 1)
@@ -5881,7 +5234,7 @@
 			(uuid "9b6c5d4d-54f7-4f39-91f0-12d414cc5647")
 		)
 		(instances
-			(project "JukeboxPanelV1"
+			(project "JukeboxPanelTest"
 				(path "/d5952d23-7be9-40c8-aefc-0ecf82dd4124"
 					(reference "TP_GND1")
 					(unit 1)
@@ -5959,7 +5312,7 @@
 			(uuid "0c95772e-9f9b-4b71-8a94-e9bf5db7f81c")
 		)
 		(instances
-			(project "JukeboxPanelV1"
+			(project "JukeboxPanelTest"
 				(path "/d5952d23-7be9-40c8-aefc-0ecf82dd4124"
 					(reference "#PWR09")
 					(unit 1)
@@ -6039,7 +5392,7 @@
 			(uuid "e2159f31-b01c-4dc2-9111-370dadc1a426")
 		)
 		(instances
-			(project "JukeboxPanelV1"
+			(project "JukeboxPanelTest"
 				(path "/d5952d23-7be9-40c8-aefc-0ecf82dd4124"
 					(reference "TP_GND2")
 					(unit 1)
@@ -6117,7 +5470,7 @@
 			(uuid "054cca45-e643-48b7-a07a-c34de44c9596")
 		)
 		(instances
-			(project "JukeboxPanelV1"
+			(project "JukeboxPanelTest"
 				(path "/d5952d23-7be9-40c8-aefc-0ecf82dd4124"
 					(reference "#PWR07")
 					(unit 1)
@@ -6200,7 +5553,7 @@
 			(uuid "9c4ae7ef-1119-4563-8dfe-877ce8be2fb3")
 		)
 		(instances
-			(project "JukeboxPanelV1"
+			(project "JukeboxPanelTest"
 				(path "/d5952d23-7be9-40c8-aefc-0ecf82dd4124"
 					(reference "J4")
 					(unit 1)
@@ -6278,7 +5631,7 @@
 			(uuid "65e15a2a-011c-45ef-bb69-bc508af75ae5")
 		)
 		(instances
-			(project "JukeboxPanelV1"
+			(project "JukeboxPanelTest"
 				(path "/d5952d23-7be9-40c8-aefc-0ecf82dd4124"
 					(reference "#PWR011")
 					(unit 1)
@@ -6356,7 +5709,7 @@
 			(uuid "c6011644-fd57-4a8e-84e2-1b31ea5bb923")
 		)
 		(instances
-			(project "JukeboxPanelV1"
+			(project "JukeboxPanelTest"
 				(path "/d5952d23-7be9-40c8-aefc-0ecf82dd4124"
 					(reference "#PWR04")
 					(unit 1)
@@ -6434,7 +5787,7 @@
 			(uuid "6adfd35d-a370-4618-89c4-0dae1adb07eb")
 		)
 		(instances
-			(project "JukeboxPanelV1"
+			(project "JukeboxPanelTest"
 				(path "/d5952d23-7be9-40c8-aefc-0ecf82dd4124"
 					(reference "#PWR05")
 					(unit 1)
@@ -6516,7 +5869,7 @@
 			(uuid "4898b904-583a-4b61-ae7c-c2ff6e9a9037")
 		)
 		(instances
-			(project "JukeboxPanelV1"
+			(project "JukeboxPanelTest"
 				(path "/d5952d23-7be9-40c8-aefc-0ecf82dd4124"
 					(reference "R2")
 					(unit 1)
@@ -6616,7 +5969,7 @@
 			(uuid "31978014-7ccc-4ea7-ab9a-ab7d46e826b9")
 		)
 		(instances
-			(project "JukeboxPanelV1"
+			(project "JukeboxPanelTest"
 				(path "/d5952d23-7be9-40c8-aefc-0ecf82dd4124"
 					(reference "A3")
 					(unit 1)
@@ -6699,88 +6052,9 @@
 			(uuid "0fe32cfe-d51e-4d63-ab2d-a341331b29d8")
 		)
 		(instances
-			(project "JukeboxPanelV1"
+			(project "JukeboxPanelTest"
 				(path "/d5952d23-7be9-40c8-aefc-0ecf82dd4124"
 					(reference "J3")
-					(unit 1)
-				)
-			)
-		)
-	)
-	(symbol
-		(lib_id "power:GND")
-		(at 238.76 72.39 0)
-		(unit 1)
-		(body_style 1)
-		(exclude_from_sim no)
-		(in_bom yes)
-		(on_board yes)
-		(in_pos_files yes)
-		(dnp no)
-		(fields_autoplaced yes)
-		(uuid "b1d52866-f003-401d-a00b-2bb9846fea6e")
-		(property "Reference" "#PWR018"
-			(at 238.76 78.74 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Value" "GND"
-			(at 241.3 73.6599 0)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify left)
-			)
-		)
-		(property "Footprint" ""
-			(at 238.76 72.39 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Datasheet" ""
-			(at 238.76 72.39 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Description" "Power symbol creates a global label with name \"GND\" , ground"
-			(at 238.76 72.39 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(pin "1"
-			(uuid "3126ea24-bc76-4375-b168-d4cda9d60aa5")
-		)
-		(instances
-			(project "JukeboxPanelV1"
-				(path "/d5952d23-7be9-40c8-aefc-0ecf82dd4124"
-					(reference "#PWR018")
 					(unit 1)
 				)
 			)
@@ -6857,7 +6131,7 @@
 			(uuid "01e7f1d8-a734-4e6c-8150-177e78521d39")
 		)
 		(instances
-			(project "JukeboxPanelV1"
+			(project "JukeboxPanelTest"
 				(path "/d5952d23-7be9-40c8-aefc-0ecf82dd4124"
 					(reference "TP_+5V1")
 					(unit 1)
@@ -6946,7 +6220,7 @@
 			(uuid "e1abeda1-72ac-4107-91b6-5413a8ea6ff0")
 		)
 		(instances
-			(project "JukeboxPanelV1"
+			(project "JukeboxPanelTest"
 				(path "/d5952d23-7be9-40c8-aefc-0ecf82dd4124"
 					(reference "J6")
 					(unit 1)
@@ -7050,7 +6324,7 @@
 			(uuid "7da92931-9592-4e1a-9248-673feeec0c05")
 		)
 		(instances
-			(project "JukeboxPanelV1"
+			(project "JukeboxPanelTest"
 				(path "/d5952d23-7be9-40c8-aefc-0ecf82dd4124"
 					(reference "J2")
 					(unit 1)
@@ -7128,7 +6402,7 @@
 			(uuid "5e68f0f4-7c37-42fe-8a92-accaa8bc1010")
 		)
 		(instances
-			(project "JukeboxPanelV1"
+			(project "JukeboxPanelTest"
 				(path "/d5952d23-7be9-40c8-aefc-0ecf82dd4124"
 					(reference "#PWR013")
 					(unit 1)
@@ -7210,7 +6484,7 @@
 			(uuid "d391200f-884a-4a2b-9d20-da032ef5c3a5")
 		)
 		(instances
-			(project "JukeboxPanelV1"
+			(project "JukeboxPanelTest"
 				(path "/d5952d23-7be9-40c8-aefc-0ecf82dd4124"
 					(reference "R1")
 					(unit 1)
@@ -7293,7 +6567,7 @@
 			(uuid "40c98f53-fc44-4abb-b20d-31106d858679")
 		)
 		(instances
-			(project "JukeboxPanelV1"
+			(project "JukeboxPanelTest"
 				(path "/d5952d23-7be9-40c8-aefc-0ecf82dd4124"
 					(reference "C1")
 					(unit 1)
@@ -7371,7 +6645,7 @@
 			(uuid "9a154b49-9068-4d76-b67a-5a07cd383935")
 		)
 		(instances
-			(project "JukeboxPanelV1"
+			(project "JukeboxPanelTest"
 				(path "/d5952d23-7be9-40c8-aefc-0ecf82dd4124"
 					(reference "#PWR010")
 					(unit 1)
@@ -7471,7 +6745,7 @@
 			(uuid "daf47ab9-c01b-4514-b9dc-c9982de60b05")
 		)
 		(instances
-			(project "JukeboxPanelV1"
+			(project "JukeboxPanelTest"
 				(path "/d5952d23-7be9-40c8-aefc-0ecf82dd4124"
 					(reference "A1")
 					(unit 1)
@@ -7549,7 +6823,7 @@
 			(uuid "50710830-fcd1-4758-b165-98095fcb8a15")
 		)
 		(instances
-			(project "JukeboxPanelV1"
+			(project "JukeboxPanelTest"
 				(path "/d5952d23-7be9-40c8-aefc-0ecf82dd4124"
 					(reference "#PWR016")
 					(unit 1)
@@ -7627,7 +6901,7 @@
 			(uuid "06b0aa54-9bf8-44da-9b86-2010082eb715")
 		)
 		(instances
-			(project "JukeboxPanelV1"
+			(project "JukeboxPanelTest"
 				(path "/d5952d23-7be9-40c8-aefc-0ecf82dd4124"
 					(reference "#PWR017")
 					(unit 1)
@@ -7823,7 +7097,7 @@
 			(uuid "cf2c171d-4f8c-4c0b-97c5-bfa7620b8d01")
 		)
 		(instances
-			(project "JukeboxPanelV1"
+			(project "JukeboxPanelTest"
 				(path "/d5952d23-7be9-40c8-aefc-0ecf82dd4124"
 					(reference "J1")
 					(unit 1)
@@ -7901,7 +7175,7 @@
 			(uuid "8fb85694-c959-4214-8411-8dd39eae08f6")
 		)
 		(instances
-			(project "JukeboxPanelV1"
+			(project "JukeboxPanelTest"
 				(path "/d5952d23-7be9-40c8-aefc-0ecf82dd4124"
 					(reference "#PWR012")
 					(unit 1)
@@ -7980,7 +7254,7 @@
 			(uuid "4f8d8daf-0a57-4f26-8588-c26559c90231")
 		)
 		(instances
-			(project "JukeboxPanelV1"
+			(project "JukeboxPanelTest"
 				(path "/d5952d23-7be9-40c8-aefc-0ecf82dd4124"
 					(reference "#PWR03")
 					(unit 1)
@@ -8063,7 +7337,7 @@
 			(uuid "4b044ea2-1cb1-445d-b0b8-c86231678397")
 		)
 		(instances
-			(project "JukeboxPanelV1"
+			(project "JukeboxPanelTest"
 				(path "/d5952d23-7be9-40c8-aefc-0ecf82dd4124"
 					(reference "R3")
 					(unit 1)
@@ -8143,7 +7417,7 @@
 			(uuid "b339c904-ec84-48ed-a10f-c0d1b6104259")
 		)
 		(instances
-			(project "JukeboxPanelV1"
+			(project "JukeboxPanelTest"
 				(path "/d5952d23-7be9-40c8-aefc-0ecf82dd4124"
 					(reference "TP_+5V2")
 					(unit 1)

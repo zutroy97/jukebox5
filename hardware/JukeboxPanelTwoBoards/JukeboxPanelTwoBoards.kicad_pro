@@ -39,9 +39,9 @@
         "other_text_thickness": 0.15,
         "other_text_upright": false,
         "pads": {
-          "drill": 0.8,
-          "height": 1.27,
-          "width": 1.27
+          "drill": 1.2,
+          "height": 2.5,
+          "width": 2.5
         },
         "silk_line_width": 0.1,
         "silk_text_italic": false,
@@ -488,7 +488,7 @@
     "pinned_symbol_libs": []
   },
   "meta": {
-    "filename": "JukeboxPanelV1.kicad_pro",
+    "filename": "JukeboxPanelTwoBoards.kicad_pro",
     "version": 3
   },
   "net_settings": {
@@ -524,7 +524,7 @@
     "last_paths": {
       "idf": "",
       "netlist": "",
-      "plot": "/Users/simonbs/Downloads/JukeboxFinalGerberFilesv1/",
+      "plot": "../../../../Downloads/Jukebox2Boards/io/",
       "specctra_dsn": "",
       "vrml": ""
     },
@@ -661,18 +661,26 @@
     "subpart_id_separator": 0,
     "top_level_sheets": [
       {
-        "filename": "JukeboxPanelV1.kicad_sch",
-        "name": "JukeboxPanelV1",
+        "filename": "JukeboxPanelTwoBoards.kicad_sch",
+        "name": "JukeboxPanelTwoBoards",
         "uuid": "d5952d23-7be9-40c8-aefc-0ecf82dd4124"
       }
     ],
-    "used_designators": "TP_+5V1-2,TP_GND1-2,TP1,H1-2,R1-4,C1,A1-5,#PWR1-18,J1-7",
+    "used_designators": "#FLG5V1,#FLG1-7,H1-9,J_Board2,R1-4,TP1,TP_+5V1-4,C1-2,#PWR1-20,A1-10,TP_GND1-4,J1-9,J11-13",
     "variants": []
   },
   "sheets": [
     [
       "d5952d23-7be9-40c8-aefc-0ecf82dd4124",
-      "JukeboxPanelV1"
+      "JukeboxPanelTwoBoards"
+    ],
+    [
+      "931c0c44-5d00-4475-a79b-57ef4de24c05",
+      "DisplayBoard"
+    ],
+    [
+      "95f13bbd-a5aa-4fdc-a9b4-c8bf91b3719b",
+      "RJ45Cable"
     ]
   ],
   "text_variables": {},
