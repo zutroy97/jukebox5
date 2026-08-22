@@ -1,6 +1,6 @@
 # Proof of concept: resistor-divider replacement for the keypad-input TXS0108E channels
 
-Status: **proposed, not yet built or tested.**
+Status: **built, tested, and in use** (10kΩ/18kΩ dividers on both lines).
 
 ## Goal
 
@@ -51,18 +51,18 @@ low enough not to load the board's original 5V logic drivers.
 | 1kΩ | 2kΩ | 3.33V | 1.67 mA | Common "I2C-style" ratio; least margin below 3.3V — usable but the tightest of these options |
 | 2kΩ | 3kΩ | 3.00V | 1.00 mA | Best margin, still low resistance |
 | 4.7kΩ | 8.2kΩ | 3.18V | 0.39 mA | Common E12 values, lower current |
-| **10kΩ** | **18kΩ** | **3.21V** | **0.18 mA** | **Recommended default** — same ratio as the 1k/1.8k option at ~10x lower current draw, kindest to the board's original driver ICs |
+| **10kΩ** | **18kΩ** | **3.21V** | **0.18 mA** | **Selected** — same ratio as the 1k/1.8k option at ~10x lower current draw, kindest to the board's original driver ICs |
 
 All of these settle in well under 1µs against the Pi GPIO's few-pF input
 capacitance — irrelevant next to the driver's existing 5µs keypad settle
 delay (`KEYPAD_SETTLE_US` in `jukebox_panel.c`), so timing is not a
-factor in picking a combination. Pick based on parts on hand; the 10k/18k
-pair is the recommendation if starting from scratch, with 1k/1.8k as the
-fallback if only smaller values are available.
+factor in picking a combination. The 10k/18k pair is what's being used;
+1k/1.8k remains the documented fallback if only smaller values are on
+hand.
 
 ## Bill of materials
 
-- 4x resistors (2 per line) — see table above for the chosen pair
+- 4x 10kΩ/18kΩ resistors (2 per line)
 - Breadboard or perfboard for the PoC; no other active parts required
 
 ## Build / test procedure
@@ -91,7 +91,9 @@ fallback if only smaller values are available.
    miswired resistor before it becomes an intermittent-read mystery).
 6. If confirmed working and stable, remove the TXS0108E entirely and
    update `WIRING.md` to describe the divider in place of the level
-   shifter for these two channels.
+   shifter for these two channels. **Done** — the TXS0108E is out,
+   in production use, and `WIRING.md` now describes both this divider and
+   the earlier direct-wire bypass of the 5 output lines.
 
 ## Open question carried over from the corruption investigation
 
